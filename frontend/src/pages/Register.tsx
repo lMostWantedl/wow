@@ -183,24 +183,6 @@ const Register: React.FC = () => {
             </div>
           </div>
 
-          {/* Role Field */}
-          <div>
-            <label htmlFor="role" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-              Account Role
-            </label>
-            <select
-              id="role"
-              name="role"
-              value={formData.role}
-              onChange={handleInputChange}
-              className="w-full px-3.5 py-2.5 bg-slate-800/90 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
-            >
-              <option value="CUSTOMER">Customer (Client Portal)</option>
-              <option value="TECHNICIAN">Technician (Garage Staff)</option>
-              <option value="MANAGER">Manager (Full Access)</option>
-            </select>
-          </div>
-
           {/* Password Field */}
           <div>
             <label htmlFor="password" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">

@@ -127,29 +127,16 @@ const Login: React.FC = () => {
             </button>
           </div>
 
-          <div className="text-center space-y-4 pt-3 border-t border-slate-800">
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                Demo Accounts
-              </p>
-              <div className="mt-2 text-xs text-slate-300 bg-slate-950/70 rounded-lg p-3 border border-slate-800 space-y-1.5 text-left font-mono">
-                <p><span className="font-semibold text-primary-400">Manager:</span> manager@wingsonwheels.com / password123</p>
-                <p><span className="font-semibold text-amber-400">Technician:</span> technician@wingsonwheels.com / password123</p>
-                <p><span className="font-semibold text-sky-400">Customer:</span> customer@wingsonwheels.com / password123</p>
-              </div>
-            </div>
-            
-            <div>
-              <p className="text-sm text-slate-400">
-                Don't have an account?{' '}
-                <Link
-                  to="/register"
-                  className="font-semibold text-primary-400 hover:text-primary-300"
-                >
-                  Create one here
-                </Link>
-              </p>
-            </div>
+          <div className="text-center pt-3 border-t border-slate-800">
+            <p className="text-sm text-slate-400">
+              Don't have an account?{' '}
+              <Link
+                to="/register"
+                className="font-semibold text-primary-400 hover:text-primary-300"
+              >
+                Create one here
+              </Link>
+            </p>
           </div>
         </form>
       </div>

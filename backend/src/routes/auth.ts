@@ -17,7 +17,7 @@ const registerSchema = Joi.object({
   phone: Joi.string().required(),
   email: Joi.string().email().required(),
   password: Joi.string().min(6).required(),
-  role: Joi.string().valid('CUSTOMER', 'TECHNICIAN', 'MANAGER').required()
+  role: Joi.string().valid('CUSTOMER').default('CUSTOMER')
 });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'wings-on-wheels-super-secret-key-2024';
@@ -37,7 +37,8 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: error.details[0].message });
     }
 
-    const { name, phone, email, password, role } = value;
+    const { name, phone, email, password } = value;
+    const role = 'CUSTOMER';
 
     // Check if user already exists by phone or email
     const existingUserByPhone = await query('SELECT id FROM users WHERE phone = $1', [phone]);

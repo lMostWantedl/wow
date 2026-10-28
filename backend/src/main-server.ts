@@ -117,8 +117,8 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Test database connection
-app.get('/api/test-db', async (req, res) => {
+// Test database connection (Protected)
+app.get('/api/test-db', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW() as current_time');
     res.json({
@@ -134,8 +134,8 @@ app.get('/api/test-db', async (req, res) => {
   }
 });
 
-// Neon Services Status & Diagnostics
-app.get('/api/neon/status', async (req, res) => {
+// Neon Services Status & Diagnostics (Protected)
+app.get('/api/neon/status', authenticateToken, async (req, res) => {
   try {
     const dbTest = await pool.query(`
       SELECT 
