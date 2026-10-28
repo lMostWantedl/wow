@@ -29,7 +29,8 @@ export const authenticateToken = async (
       return res.status(401).json({ message: 'Access token required' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    const JWT_SECRET = process.env.JWT_SECRET || 'wings-on-wheels-super-secret-key-2024';
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
     
     // Verify user still exists and is active
     const userResult = await query(

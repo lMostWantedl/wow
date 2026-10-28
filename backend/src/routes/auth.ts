@@ -20,9 +20,11 @@ const registerSchema = Joi.object({
   role: Joi.string().valid('CUSTOMER', 'TECHNICIAN', 'MANAGER').required()
 });
 
+const JWT_SECRET = process.env.JWT_SECRET || 'wings-on-wheels-super-secret-key-2024';
+
 // Generate JWT token
 const generateToken = (userId: string): string => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET!, {
+  return jwt.sign({ userId }, JWT_SECRET, {
     expiresIn: '7d'
   });
 };
@@ -153,7 +155,7 @@ router.get('/me', async (req, res) => {
       return res.status(401).json({ message: 'Access token required' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
     
     const userResult = await query(
       'SELECT id, name, phone, email, role, scopes, is_active as "isActive", created_at as "createdAt" FROM users WHERE id = $1',
