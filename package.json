@@ -15,10 +15,19 @@
     "db:migrate": "cd backend && npm run db:migrate",
     "db:generate": "cd backend && npm run db:generate"
   },
-  "keywords": ["car-garage", "billing", "management", "portal"],
+  "keywords": [
+    "car-garage",
+    "billing",
+    "management",
+    "portal"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "@neon/config": "^1.9.5",
+    "@neon/env": "^1.6.6"
   }
 }

@@ -1,14 +1,35 @@
 import { Pool, PoolClient } from 'pg';
 import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
 
-dotenv.config();
+// Load .env and .env.local from current dir and root
+const envFiles = [
+  path.resolve(process.cwd(), '.env.local'),
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(process.cwd(), '..', '.env.local'),
+  path.resolve(process.cwd(), '..', '.env'),
+  path.resolve(__dirname, '..', '..', '.env.local'),
+  path.resolve(__dirname, '..', '..', '.env'),
+];
+
+for (const envFile of envFiles) {
+  if (fs.existsSync(envFile)) {
+    dotenv.config({ path: envFile });
+  }
+}
+
+const isNeonOrSsl = 
+  process.env.NODE_ENV === 'production' || 
+  process.env.DATABASE_URL?.includes('neon.tech') ||
+  process.env.DATABASE_URL?.includes('sslmode=require');
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: isNeonOrSsl ? { rejectUnauthorized: false } : false,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 5000,
 });
 
 pool.on('connect', () => {

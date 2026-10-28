@@ -2,6 +2,24 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
+
+// Load .env and .env.local from current dir and root
+const envFiles = [
+  path.resolve(process.cwd(), '.env.local'),
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(process.cwd(), '..', '.env.local'),
+  path.resolve(process.cwd(), '..', '.env'),
+  path.resolve(__dirname, '..', '.env.local'),
+  path.resolve(__dirname, '..', '.env'),
+];
+
+for (const envFile of envFiles) {
+  if (fs.existsSync(envFile)) {
+    dotenv.config({ path: envFile });
+  }
+}
 
 // Import database
 import { pool, closePool } from './database/connection';
@@ -57,6 +75,48 @@ app.get('/api/test-db', async (req, res) => {
     console.error('Database test error:', error);
     res.status(500).json({
       message: 'Database connection failed',
+      error: error.message
+    });
+  }
+});
+
+// Neon Services Status & Diagnostics
+app.get('/api/neon/status', async (req, res) => {
+  try {
+    const dbTest = await pool.query(`
+      SELECT 
+        current_database() as database,
+        current_user as user,
+        version() as version,
+        (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public') as tables_count
+    `);
+
+    res.json({
+      status: 'ONLINE',
+      neonBranch: process.env.NEON_BRANCH || 'production',
+      services: {
+        postgres: {
+          status: 'CONNECTED',
+          database: dbTest.rows[0].database,
+          user: dbTest.rows[0].user,
+          tablesCount: parseInt(dbTest.rows[0].tables_count, 10),
+          isPooled: Boolean(process.env.DATABASE_URL?.includes('-pooler')),
+          version: dbTest.rows[0].version
+        },
+        auth: {
+          status: process.env.NEON_AUTH_BASE_URL ? 'CONFIGURED' : 'UNCONFIGURED',
+          baseUrl: process.env.NEON_AUTH_BASE_URL || null,
+          jwksUrl: process.env.NEON_AUTH_JWKS_URL || null
+        },
+        realtime: {
+          status: process.env.NEON_REALTIME_URL ? 'CONFIGURED' : 'UNCONFIGURED',
+          url: process.env.NEON_REALTIME_URL || null
+        }
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      status: 'ERROR',
       error: error.message
     });
   }

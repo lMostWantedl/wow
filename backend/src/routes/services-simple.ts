@@ -81,8 +81,8 @@ async function ensureDefaultServices() {
     for (const s of DEFAULT_AUTOMOTIVE_SERVICES) {
       await query(
         `INSERT INTO services (name, description, base_price, duration)
-         SELECT $1, $2, $3, $4
-         WHERE NOT EXISTS (SELECT 1 FROM services WHERE LOWER(name) = LOWER($1))`,
+         SELECT $1::varchar, $2::text, $3::numeric, $4::integer
+         WHERE NOT EXISTS (SELECT 1 FROM services WHERE LOWER(name) = LOWER($1::varchar))`,
         [s.name, s.description, s.price, s.duration]
       );
     }
