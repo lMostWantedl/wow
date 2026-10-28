@@ -15,7 +15,9 @@ const createUserSchema = Joi.object({
   role: Joi.string().valid('CUSTOMER', 'TECHNICIAN', 'MANAGER').required(),
   scopes: Joi.array().items(Joi.string()).optional(),
   isActive: Joi.boolean().optional(),
-  is_active: Joi.boolean().optional()
+  is_active: Joi.boolean().optional(),
+  baseSalary: Joi.number().min(0).allow(null).optional(),
+  base_salary: Joi.number().min(0).allow(null).optional()
 });
 
 const updateUserSchema = Joi.object({
@@ -26,7 +28,9 @@ const updateUserSchema = Joi.object({
   role: Joi.string().valid('CUSTOMER', 'TECHNICIAN', 'MANAGER').required(),
   scopes: Joi.array().items(Joi.string()).optional(),
   isActive: Joi.boolean().optional(),
-  is_active: Joi.boolean().optional()
+  is_active: Joi.boolean().optional(),
+  baseSalary: Joi.number().min(0).allow(null).optional(),
+  base_salary: Joi.number().min(0).allow(null).optional()
 });
 
 // Helper to format user row
@@ -56,6 +60,8 @@ const formatUserRow = (row: any) => {
     email: row.email,
     role: row.role,
     scopes,
+    baseSalary: parseFloat(row.baseSalary || row.base_salary || '0'),
+    base_salary: parseFloat(row.baseSalary || row.base_salary || '0'),
     isActive: row.isActive !== undefined ? Boolean(row.isActive) : Boolean(row.is_active),
     is_active: row.isActive !== undefined ? Boolean(row.isActive) : Boolean(row.is_active),
     createdAt: row.createdAt || row.created_at,
@@ -108,6 +114,8 @@ router.get('/', requireRoleOrScope(['MANAGER'], 'users'), async (req: AuthReques
         email, 
         role, 
         scopes,
+        COALESCE(base_salary, 0) as "baseSalary",
+        COALESCE(base_salary, 0) as base_salary,
         is_active as "isActive", 
         created_at as "createdAt", 
         updated_at as "updatedAt" 
@@ -172,6 +180,8 @@ router.get('/:id', requireRoleOrScope(['MANAGER'], 'users'), async (req: AuthReq
         email, 
         role, 
         scopes,
+        COALESCE(base_salary, 0) as "baseSalary",
+        COALESCE(base_salary, 0) as base_salary,
         is_active as "isActive", 
         created_at as "createdAt", 
         updated_at as "updatedAt" 
@@ -232,12 +242,14 @@ router.post('/', requireRoleOrScope(['MANAGER'], 'users'), async (req: AuthReque
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
+    const baseSalary = value.baseSalary !== undefined ? value.baseSalary : (value.base_salary !== undefined ? value.base_salary : 0);
+
     // Create user
     const result = await query(
-      `INSERT INTO users (name, phone, email, password, role, is_active, scopes) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7) 
-       RETURNING id, name, phone, email, role, scopes, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt"`,
-      [name, phone, email, hashedPassword, role, isActive, JSON.stringify(scopes)]
+      `INSERT INTO users (name, phone, email, password, role, is_active, scopes, base_salary) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+       RETURNING id, name, phone, email, role, scopes, base_salary, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt"`,
+      [name, phone, email, hashedPassword, role, isActive, JSON.stringify(scopes), baseSalary]
     );
 
     const newUser = result.rows[0];
@@ -319,6 +331,9 @@ router.put('/:id', requireRoleOrScope(['MANAGER'], 'users'), async (req: AuthReq
 
     const finalIsActive = isActive !== undefined ? isActive : existingUser.rows[0].is_active;
     const scopesJson = finalScopes !== undefined ? JSON.stringify(finalScopes) : (existingUser.rows[0].scopes || '[]');
+    const finalBaseSalary = value.baseSalary !== undefined 
+      ? value.baseSalary 
+      : (value.base_salary !== undefined ? value.base_salary : (existingUser.rows[0].base_salary || 0));
 
     let updateQuery: string;
     let updateParams: any[];
@@ -327,19 +342,19 @@ router.put('/:id', requireRoleOrScope(['MANAGER'], 'users'), async (req: AuthReq
       const hashedPassword = await bcrypt.hash(password.trim(), 12);
       updateQuery = `
         UPDATE users 
-        SET name = $1, phone = $2, email = $3, role = $4, is_active = $5, scopes = $6, password = $7, updated_at = CURRENT_TIMESTAMP 
-        WHERE id = $8 
-        RETURNING id, name, phone, email, role, scopes, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt"
+        SET name = $1, phone = $2, email = $3, role = $4, is_active = $5, scopes = $6, password = $7, base_salary = $8, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = $9 
+        RETURNING id, name, phone, email, role, scopes, base_salary, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt"
       `;
-      updateParams = [name, phone, email, role, finalIsActive, scopesJson, hashedPassword, id];
+      updateParams = [name, phone, email, role, finalIsActive, scopesJson, hashedPassword, finalBaseSalary, id];
     } else {
       updateQuery = `
         UPDATE users 
-        SET name = $1, phone = $2, email = $3, role = $4, is_active = $5, scopes = $6, updated_at = CURRENT_TIMESTAMP 
-        WHERE id = $7 
-        RETURNING id, name, phone, email, role, scopes, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt"
+        SET name = $1, phone = $2, email = $3, role = $4, is_active = $5, scopes = $6, base_salary = $7, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = $8 
+        RETURNING id, name, phone, email, role, scopes, base_salary, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt"
       `;
-      updateParams = [name, phone, email, role, finalIsActive, scopesJson, id];
+      updateParams = [name, phone, email, role, finalIsActive, scopesJson, finalBaseSalary, id];
     }
 
     const result = await query(updateQuery, updateParams);

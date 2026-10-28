@@ -34,6 +34,7 @@ const EditUser: React.FC = () => {
     email: '',
     password: '',
     role: 'TECHNICIAN' as 'CUSTOMER' | 'TECHNICIAN' | 'MANAGER',
+    baseSalary: 0,
     isActive: true,
     scopes: [] as string[]
   });
@@ -63,6 +64,7 @@ const EditUser: React.FC = () => {
         email: user.email || '',
         password: '',
         role: user.role || 'TECHNICIAN',
+        baseSalary: Number(user.baseSalary ?? user.base_salary ?? 0),
         isActive: user.isActive ?? true,
         scopes: initialScopes
       });
@@ -107,6 +109,7 @@ const EditUser: React.FC = () => {
       phone: formData.phone.trim(),
       email: formData.email?.trim() || undefined,
       role: formData.role,
+      baseSalary: Number(formData.baseSalary) || 0,
       isActive: formData.isActive,
       scopes: formData.scopes
     };
@@ -318,6 +321,33 @@ const EditUser: React.FC = () => {
                 Only fill this field if you want to set a new password for this user.
               </p>
             </div>
+
+            {/* Monthly Base Salary (for Staff) */}
+            {formData.role !== 'CUSTOMER' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Monthly Base Salary (₹)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">
+                    ₹
+                  </span>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    name="baseSalary"
+                    value={formData.baseSalary || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, baseSalary: parseFloat(e.target.value) || 0 }))}
+                    className="input pl-8 font-mono"
+                    placeholder="e.g. 25000"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Default compensation auto-filled when disbursing salary in the Financial Suite.
+                </p>
+              </div>
+            )}
 
             {/* Active Status */}
             <div className="flex items-center pt-6">

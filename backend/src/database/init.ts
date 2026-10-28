@@ -52,6 +52,7 @@ const initializeDatabase = async () => {
       ALTER TABLE bills ADD COLUMN IF NOT EXISTS vehicle_id UUID REFERENCES customer_vehicles(id) ON DELETE SET NULL;
       ALTER TABLE vehicle_variants ADD COLUMN IF NOT EXISTS ecm VARCHAR(100);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS scopes JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS base_salary NUMERIC(12, 2) DEFAULT 0;
       
       -- Initialize default scopes for existing users if empty
       UPDATE users SET scopes = '["dashboard", "bills", "customers", "spare_parts", "services", "financial", "users"]'::jsonb WHERE role = 'MANAGER' AND (scopes IS NULL OR scopes = '[]'::jsonb);

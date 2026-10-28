@@ -5,6 +5,8 @@ export interface User {
   email?: string;
   role: 'CUSTOMER' | 'TECHNICIAN' | 'MANAGER';
   scopes?: string[];
+  baseSalary?: number;
+  base_salary?: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -295,6 +297,8 @@ export interface StaffSalarySummary {
   staff_name: string;
   staff_role: string;
   staff_phone?: string;
+  base_salary?: number | string;
+  baseSalary?: number | string;
   payment_count: number;
   total_salary_paid: number;
   last_paid_date?: string;

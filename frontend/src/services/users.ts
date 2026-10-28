@@ -23,6 +23,8 @@ export interface CreateUserData {
   role: 'CUSTOMER' | 'TECHNICIAN' | 'MANAGER';
   scopes?: string[];
   isActive?: boolean;
+  baseSalary?: number;
+  base_salary?: number;
 }
 
 const normalizeUser = (u: any): User => {
@@ -44,9 +46,13 @@ const normalizeUser = (u: any): User => {
     scopes = ['bills'];
   }
 
+  const baseSalary = Number(u.baseSalary ?? u.base_salary ?? 0);
+
   return {
     ...u,
     scopes,
+    baseSalary,
+    base_salary: baseSalary,
     isActive: u.isActive !== undefined ? Boolean(u.isActive) : (u.is_active !== undefined ? Boolean(u.is_active) : true),
     createdAt: u.createdAt || u.created_at || '',
     updatedAt: u.updatedAt || u.updated_at || '',

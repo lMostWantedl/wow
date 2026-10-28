@@ -230,6 +230,11 @@ const Users: React.FC = () => {
                         <span className={`badge ${getRoleBadge(userItem.role)}`}>
                           {userItem.role}
                         </span>
+                        {userItem.role !== 'CUSTOMER' && Number(userItem.baseSalary || (userItem as any).base_salary) > 0 && (
+                          <span className="block mt-1 font-mono text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            ₹{Number(userItem.baseSalary || (userItem as any).base_salary).toLocaleString('en-IN')}/mo
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex flex-wrap gap-1 max-w-xs">

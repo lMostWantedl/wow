@@ -178,6 +178,12 @@ const Financial: React.FC = () => {
   const [formIsRecurring, setFormIsRecurring] = useState(false);
   const [formRecurringFreq, setFormRecurringFreq] = useState('MONTHLY');
 
+  // Set Salary Modal State
+  const [isSalaryConfigModalOpen, setIsSalaryConfigModalOpen] = useState(false);
+  const [selectedStaffForSalary, setSelectedStaffForSalary] = useState<any>(null);
+  const [salaryInputAmount, setSalaryInputAmount] = useState('');
+  const [isUpdatingSalary, setIsUpdatingSalary] = useState(false);
+
   // 1. Financial Report Query
   const { data: financialData } = useQuery(
     ['financial-reports', period, startDate, endDate],
@@ -315,7 +321,8 @@ const Financial: React.FC = () => {
     defaultType?: ExpenseType,
     defaultUserId?: string,
     defaultPayee?: string,
-    defaultTitle?: string
+    defaultTitle?: string,
+    defaultAmount?: string | number
   ) => {
     resetForm();
     if (defaultCategory) {
@@ -325,7 +332,38 @@ const Financial: React.FC = () => {
     if (defaultUserId) setFormUserId(defaultUserId);
     if (defaultPayee) setFormPayee(defaultPayee);
     if (defaultTitle) setFormTitle(defaultTitle);
+    if (defaultAmount && Number(defaultAmount) > 0) {
+      setFormAmount(String(defaultAmount));
+    }
     setIsExpenseModalOpen(true);
+  };
+
+  const handleOpenSalaryConfigModal = (staff: any) => {
+    setSelectedStaffForSalary(staff);
+    setSalaryInputAmount(staff.base_salary && Number(staff.base_salary) > 0 ? String(staff.base_salary) : '');
+    setIsSalaryConfigModalOpen(true);
+  };
+
+  const handleSaveStaffSalary = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStaffForSalary) return;
+    const amount = parseFloat(salaryInputAmount);
+    if (isNaN(amount) || amount < 0) {
+      toast.error('Please enter a valid salary amount (0 or higher)');
+      return;
+    }
+    setIsUpdatingSalary(true);
+    try {
+      await financialService.updateStaffSalary(selectedStaffForSalary.user_id, amount);
+      toast.success(`Updated default salary for ${selectedStaffForSalary.staff_name} to ₹${amount.toLocaleString('en-IN')}`);
+      queryClient.invalidateQueries(['financial-salaries']);
+      queryClient.invalidateQueries(['users']);
+      setIsSalaryConfigModalOpen(false);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to update salary');
+    } finally {
+      setIsUpdatingSalary(false);
+    }
   };
 
   const handleOpenEditModal = (expense: GarageExpense) => {
@@ -1361,8 +1399,29 @@ const Financial: React.FC = () => {
                       </span>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800/80 space-y-2 text-xs">
-                      <div className="flex justify-between">
+                    <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800/80 space-y-2.5 text-xs">
+                      {/* Base Salary Row */}
+                      <div className="flex justify-between items-center bg-gray-50 dark:bg-slate-900/60 p-2.5 rounded-lg border border-gray-100 dark:border-slate-800">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-slate-400 block tracking-wider">
+                            Base Monthly Salary:
+                          </span>
+                          <span className="font-bold text-sm text-emerald-600 dark:text-emerald-400 font-mono">
+                            {Number(staff.base_salary) > 0 ? formatCurrency(staff.base_salary) : 'Not configured'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenSalaryConfigModal(staff)}
+                          className="btn btn-secondary text-[11px] py-1 px-2.5 flex items-center gap-1 text-primary-600 dark:text-primary-400 border-primary-200 dark:border-primary-900/50 hover:bg-primary-50 dark:hover:bg-primary-950/40 transition-colors"
+                          title="Configure default monthly salary"
+                        >
+                          <Edit3 className="h-3 w-3" />
+                          <span>{Number(staff.base_salary) > 0 ? 'Edit' : 'Set Salary'}</span>
+                        </button>
+                      </div>
+
+                      <div className="flex justify-between pt-1">
                         <span className="text-gray-500 dark:text-slate-400">Total Paid in {salaryYear}:</span>
                         <span className="font-bold text-gray-900 dark:text-white font-mono">
                           {formatCurrency(staff.total_salary_paid)}
@@ -1391,7 +1450,8 @@ const Financial: React.FC = () => {
                           'OPEX',
                           staff.user_id,
                           staff.staff_name,
-                          `Monthly Salary - ${staff.staff_name} (${format(new Date(), 'MMM yyyy')})`
+                          `Monthly Salary - ${staff.staff_name} (${format(new Date(), 'MMM yyyy')})`,
+                          Number(staff.base_salary) > 0 ? staff.base_salary : ''
                         )
                       }
                       className="btn btn-secondary text-xs w-full py-1.5 flex items-center justify-center gap-1.5"
@@ -1870,17 +1930,31 @@ const Financial: React.FC = () => {
                       const uid = e.target.value;
                       setFormUserId(uid);
                       const selectedStaff = staffMembers.find((s) => s.id === uid);
-                      if (selectedStaff && !formPayee) {
+                      if (selectedStaff) {
                         setFormPayee(selectedStaff.name);
+                        if (formCategory === 'SALARY') {
+                          if (!formTitle || formTitle.startsWith('Monthly Salary')) {
+                            setFormTitle(`Monthly Salary - ${selectedStaff.name} (${format(new Date(), 'MMM yyyy')})`);
+                          }
+                          const staffSumm = (salariesData?.staffSummary || []).find((s) => s.user_id === uid);
+                          const baseSal = Number(staffSumm?.base_salary ?? (selectedStaff as any).baseSalary ?? (selectedStaff as any).base_salary ?? 0);
+                          if (baseSal > 0) {
+                            setFormAmount(String(baseSal));
+                          }
+                        }
                       }
                     }}
                   >
                     <option value="">-- No specific staff user linked --</option>
-                    {staffMembers.map((staff) => (
-                      <option key={staff.id} value={staff.id}>
-                        {staff.name} ({staff.role}) - {staff.phone}
-                      </option>
-                    ))}
+                    {staffMembers.map((staff) => {
+                      const staffSumm = (salariesData?.staffSummary || []).find((s) => s.user_id === staff.id);
+                      const sal = Number(staffSumm?.base_salary ?? (staff as any).baseSalary ?? (staff as any).base_salary ?? 0);
+                      return (
+                        <option key={staff.id} value={staff.id}>
+                          {staff.name} ({staff.role}) {sal > 0 ? `• ₹${sal.toLocaleString('en-IN')}/mo` : ''} - {staff.phone}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               )}
@@ -2003,6 +2077,106 @@ const Financial: React.FC = () => {
                 {deleteExpenseMutation.isLoading ? 'Deleting...' : 'Delete Expense'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Set Employee Default Salary Modal */}
+      {isSalaryConfigModalOpen && selectedStaffForSalary && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="card max-w-md w-full bg-white dark:bg-[#0d1220] border border-gray-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-900/80 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+                  <CreditCard className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-white">
+                    Set Employee Base Salary
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">
+                    Configure default monthly compensation
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSalaryConfigModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 p-1"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveStaffSalary} className="p-6 space-y-4">
+              <div className="bg-gray-50 dark:bg-slate-900/50 p-3 rounded-xl border border-gray-100 dark:border-slate-800 space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-500 dark:text-slate-400">Employee:</span>
+                  <span className="font-bold text-xs text-gray-900 dark:text-slate-100">
+                    {selectedStaffForSalary.staff_name}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-500 dark:text-slate-400">Role:</span>
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300">
+                    {selectedStaffForSalary.staff_role}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-500 dark:text-slate-400">Phone:</span>
+                  <span className="font-mono text-xs text-gray-700 dark:text-slate-300">
+                    {selectedStaffForSalary.staff_phone || 'N/A'}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1.5">
+                  Monthly Base Salary (₹) <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">
+                    ₹
+                  </span>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    required
+                    placeholder="e.g. 25000"
+                    value={salaryInputAmount}
+                    onChange={(e) => setSalaryInputAmount(e.target.value)}
+                    className="input pl-8 w-full font-mono text-sm"
+                    autoFocus
+                  />
+                </div>
+                <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-1.5">
+                  When you record a salary payout for this employee, this amount will automatically pre-fill into the payment voucher.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsSalaryConfigModalOpen(false)}
+                  className="btn btn-secondary text-xs py-2 px-3.5"
+                  disabled={isUpdatingSalary}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary text-xs py-2 px-4 flex items-center gap-1.5"
+                  disabled={isUpdatingSalary}
+                >
+                  {isUpdatingSalary ? (
+                    <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white"></div>
+                  ) : (
+                    <span>Save Salary</span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

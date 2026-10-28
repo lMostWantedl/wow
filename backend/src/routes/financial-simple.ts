@@ -658,13 +658,14 @@ router.get('/salaries', requireRoleOrScope(['MANAGER'], 'financial'), async (req
         u.name as staff_name,
         u.role as staff_role,
         u.phone as staff_phone,
+        COALESCE(u.base_salary, 0) as base_salary,
         COUNT(ge.id) as payment_count,
         COALESCE(SUM(ge.amount), 0) as total_salary_paid,
         MAX(ge.expense_date) as last_paid_date
       FROM users u
       LEFT JOIN garage_expenses ge ON (ge.user_id = u.id AND ge.category = 'SALARY' AND EXTRACT(YEAR FROM ge.expense_date) = $1)
       WHERE u.role IN ('MANAGER', 'TECHNICIAN')
-      GROUP BY u.id, u.name, u.role, u.phone
+      GROUP BY u.id, u.name, u.role, u.phone, u.base_salary
       ORDER BY total_salary_paid DESC, u.name ASC
     `, [year]);
 
@@ -687,6 +688,36 @@ router.get('/salaries', requireRoleOrScope(['MANAGER'], 'financial'), async (req
     });
   } catch (error: any) {
     console.error('Get salaries error:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+// Update employee base monthly salary
+router.put('/staff-salary/:userId', requireRoleOrScope(['MANAGER'], 'financial'), async (req: AuthRequest, res) => {
+  try {
+    const { userId } = req.params;
+    const { baseSalary } = req.body;
+
+    const parsedSalary = parseFloat(baseSalary);
+    if (isNaN(parsedSalary) || parsedSalary < 0) {
+      return res.status(400).json({ message: 'Invalid salary amount' });
+    }
+
+    const result = await query(
+      'UPDATE users SET base_salary = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, name, role, phone, base_salary',
+      [parsedSalary, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Staff member not found' });
+    }
+
+    res.json({
+      message: 'Base salary updated successfully',
+      staff: result.rows[0]
+    });
+  } catch (error: any) {
+    console.error('Update staff salary error:', error);
     res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });

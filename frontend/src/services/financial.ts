@@ -117,4 +117,9 @@ export const financialService = {
     const response = await api.get('/financial/salaries', { params: { year } });
     return response.data;
   },
+
+  updateStaffSalary: async (userId: string, baseSalary: number): Promise<{ message: string; staff: any }> => {
+    const response = await api.put(`/financial/staff-salary/${userId}`, { baseSalary });
+    return response.data;
+  },
 };
