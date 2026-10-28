@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from 'react-query';
 import { customersService } from '../services/customers';
 import { vehiclesService } from '../services/vehicles';
-import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, Plus, Trash2, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getEngineTypesByCategory, FUEL_TYPES, TRANSMISSION_TYPES, BODY_TYPES } from '../constants/vehicleOptions';
@@ -26,7 +25,6 @@ interface CreateCustomerFormData {
 }
 
 const CreateCustomer: React.FC = () => {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const [manualInputs, setManualInputs] = useState<{ [key: string]: boolean }>({});
   const [manualData, setManualData] = useState<{ [key: string]: any }>({});

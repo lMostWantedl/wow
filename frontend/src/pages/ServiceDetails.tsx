@@ -3,7 +3,7 @@ import { useQuery } from 'react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { servicesService } from '../services/services';
-import { ArrowLeft, Edit, Clock, DollarSign, Wrench } from 'lucide-react';
+import { ArrowLeft, Edit, Wrench } from 'lucide-react';
 
 const ServiceDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();

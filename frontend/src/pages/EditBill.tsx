@@ -2,15 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import { billsService } from '../services/bills';
-import { customersService } from '../services/customers';
 import { sparePartsService } from '../services/spareParts';
 import { servicesService } from '../services/services';
 import { usersService } from '../services/users';
-import { vehiclesService } from '../services/vehicles';
 import { CreateBillData } from '../types';
-import { Plus, Trash2, Save, X, UserPlus, ArrowLeft, Wrench, Package } from 'lucide-react';
+import { Plus, Trash2, Save, X, ArrowLeft, Wrench, Package } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface EditBillFormData {
@@ -33,7 +30,6 @@ interface EditBillFormData {
 
 const EditBill: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -58,7 +54,6 @@ const EditBill: React.FC = () => {
   const bill = billData?.bill;
 
   // Fetch other data
-  const { data: customers } = useQuery('customers', () => customersService.getCustomers());
   const { data: spareParts } = useQuery('spareParts', () => sparePartsService.getSpareParts()) as { data: any };
   const { data: services } = useQuery('services', () => servicesService.getServices()) as { data: any };
   const { data: technicians } = useQuery('technicians', () => usersService.getTechnicians()) as { data: any };

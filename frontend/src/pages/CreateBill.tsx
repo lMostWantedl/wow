@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import { billsService } from '../services/bills';
 import { customersService } from '../services/customers';
 import { sparePartsService } from '../services/spareParts';
@@ -10,7 +9,7 @@ import { servicesService } from '../services/services';
 import { usersService } from '../services/users';
 import { vehiclesService } from '../services/vehicles';
 import { CreateBillData } from '../types';
-import { Plus, Trash2, Save, X, UserPlus, Search, Package, Wrench } from 'lucide-react';
+import { Plus, Trash2, Save, X, UserPlus, Package, Wrench } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getEngineTypesByCategory, FUEL_TYPES, TRANSMISSION_TYPES } from '../constants/vehicleOptions';
 import { DEFAULT_SPARE_PART_CATEGORIES } from '../constants/sparePartOptions';
@@ -34,7 +33,6 @@ interface CreateBillFormData {
 }
 
 const CreateBill: React.FC = () => {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
@@ -152,7 +150,7 @@ const CreateBill: React.FC = () => {
     colorType: ''
   });
 
-  const { register, control, handleSubmit, watch, setValue, formState: { errors } } = useForm<CreateBillFormData>({
+  const { register, control, handleSubmit, watch, setValue } = useForm<CreateBillFormData>({
     defaultValues: {
       spareParts: [],
       services: [],
@@ -188,7 +186,7 @@ const CreateBill: React.FC = () => {
   const { data: spareParts } = useQuery('spare-parts', () => sparePartsService.getSpareParts({ limit: 100 }));
   const { data: services } = useQuery('services', () => servicesService.getServices({ limit: 100 }));
   const { data: technicians } = useQuery('technicians', () => usersService.getTechnicians());
-  const { data: categories, isLoading: categoriesLoading, error: categoriesError } = useQuery(
+  const { data: categories } = useQuery(
     'spare-part-categories', 
     () => sparePartsService.getCategories(),
     {
@@ -415,11 +413,10 @@ const CreateBill: React.FC = () => {
   };
 
 
-  const handleCustomerCreated = (customer: any) => {
+  /* const handleCustomerCreated = (customer: any) => {
     setSelectedCustomer(customer);
-    // Refresh customers list
     queryClient.invalidateQueries('customers');
-  };
+  }; */
 
   // Populate vehicle info when customer is selected
   useEffect(() => {

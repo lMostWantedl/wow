@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../contexts/AuthContext';
-import { User } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const Profile: React.FC = () => {

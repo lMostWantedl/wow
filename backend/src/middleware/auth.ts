@@ -9,6 +9,11 @@ export interface AuthRequest extends Request {
     phone: string;
     scopes: string[];
   };
+  headers: any;
+  params: any;
+  query: any;
+  body: any;
+  [key: string]: any;
 }
 
 export const authenticateToken = async (

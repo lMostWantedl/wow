@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { usersService } from '../services/users';
-import { Plus, Search, User, Edit, Trash2, Power, Eye } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Power, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const ROLE_DEFAULT_SCOPES: Record<string, string[]> = {
