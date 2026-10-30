@@ -242,6 +242,39 @@ export type ExpenseType = 'OPEX' | 'CAPEX';
 
 export type ExpensePaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'UPI' | 'CARD' | 'CHEQUE';
 
+export type InvestmentType = 'INITIAL_CAPITAL' | 'PARTNER_EQUITY' | 'WORKING_CAPITAL' | 'LOAN_DEBT';
+
+export interface GarageInvestment {
+  id: string;
+  investment_number: string;
+  investor_name: string;
+  investment_type: InvestmentType;
+  amount: number;
+  investment_date: string;
+  payment_method: ExpensePaymentMethod;
+  reference_number?: string;
+  notes?: string;
+  creator_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateInvestmentData {
+  investorName: string;
+  investmentType: InvestmentType;
+  amount: number;
+  investmentDate: string;
+  paymentMethod: ExpensePaymentMethod;
+  referenceNumber?: string;
+  notes?: string;
+}
+
+export interface InvestmentsResponse {
+  investments: GarageInvestment[];
+  totalInvested: number;
+  byType: Record<InvestmentType, number>;
+}
+
 export interface GarageExpense {
   id: string;
   expense_number: string;
@@ -342,6 +375,8 @@ export interface FinancialReport {
     opex?: number;
     capex?: number;
     allTimeCapex?: number;
+    allTimeInvestments?: number;
+    netWorkingCapital?: number;
     grossProfit?: number;
     grossProfitMargin?: number;
     totalProfit: number;

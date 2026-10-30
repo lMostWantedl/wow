@@ -6,7 +6,10 @@ import {
   ExpensesListResponse,
   SalariesResponse,
   ExpenseCategory,
-  ExpenseType
+  ExpenseType,
+  GarageInvestment,
+  CreateInvestmentData,
+  InvestmentsResponse
 } from '../types';
 
 export interface DailyFinancialResponse {
@@ -120,6 +123,31 @@ export const financialService = {
 
   updateStaffSalary: async (userId: string, baseSalary: number): Promise<{ message: string; staff: any }> => {
     const response = await api.put(`/financial/staff-salary/${userId}`, { baseSalary });
+    return response.data;
+  },
+
+  getInvestments: async (): Promise<InvestmentsResponse> => {
+    const response = await api.get('/financial/investments');
+    return response.data;
+  },
+
+  createInvestment: async (
+    data: CreateInvestmentData
+  ): Promise<{ message: string; investment: GarageInvestment }> => {
+    const response = await api.post('/financial/investments', data);
+    return response.data;
+  },
+
+  updateInvestment: async (
+    id: string,
+    data: Partial<CreateInvestmentData>
+  ): Promise<{ message: string; investment: GarageInvestment }> => {
+    const response = await api.put(`/financial/investments/${id}`, data);
+    return response.data;
+  },
+
+  deleteInvestment: async (id: string): Promise<{ message: string; deletedId: string }> => {
+    const response = await api.delete(`/financial/investments/${id}`);
     return response.data;
   },
 };

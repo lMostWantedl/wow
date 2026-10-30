@@ -53,6 +53,23 @@ const initializeDatabase = async () => {
       ALTER TABLE vehicle_variants ADD COLUMN IF NOT EXISTS ecm VARCHAR(100);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS scopes JSONB DEFAULT '[]'::jsonb;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS base_salary NUMERIC(12, 2) DEFAULT 0;
+
+      CREATE TABLE IF NOT EXISTS garage_investments (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        investment_number VARCHAR(50) UNIQUE NOT NULL,
+        investor_name VARCHAR(255) NOT NULL,
+        investment_type VARCHAR(50) NOT NULL DEFAULT 'INITIAL_CAPITAL',
+        amount DECIMAL(12, 2) NOT NULL,
+        investment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        payment_method VARCHAR(50) NOT NULL DEFAULT 'BANK_TRANSFER',
+        reference_number VARCHAR(100),
+        notes TEXT,
+        created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_garage_investments_date ON garage_investments(investment_date);
+      CREATE INDEX IF NOT EXISTS idx_garage_investments_type ON garage_investments(investment_type);
       
       -- Initialize default scopes for existing users if empty
       UPDATE users SET scopes = '["dashboard", "bills", "customers", "spare_parts", "services", "financial", "users"]'::jsonb WHERE role = 'MANAGER' AND (scopes IS NULL OR scopes = '[]'::jsonb);

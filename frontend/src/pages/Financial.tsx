@@ -8,7 +8,10 @@ import {
   ExpenseCategory,
   ExpenseType,
   ExpensePaymentMethod,
-  CreateExpenseData
+  CreateExpenseData,
+  GarageInvestment,
+  InvestmentType,
+  CreateInvestmentData
 } from '../types';
 import {
   DollarSign,
@@ -32,7 +35,8 @@ import {
   ShieldCheck,
   Tag,
   ArrowUpRight,
-  Briefcase
+  Briefcase,
+  Landmark,
 } from 'lucide-react';
 import {
   XAxis,
@@ -133,6 +137,33 @@ export const CATEGORY_CONFIG: Record<
   },
 };
 
+
+export const INVESTMENT_TYPE_CONFIG: Record<
+  InvestmentType,
+  { label: string; badgeClass: string; description: string }
+> = {
+  INITIAL_CAPITAL: {
+    label: 'Initial Setup Capital',
+    badgeClass: 'bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 dark:border dark:border-purple-800/60',
+    description: 'Founder initial investment for garage launch',
+  },
+  PARTNER_EQUITY: {
+    label: 'Partner / Equity Share',
+    badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border dark:border-emerald-800/60',
+    description: 'Partner or shareholder equity contribution',
+  },
+  WORKING_CAPITAL: {
+    label: 'Working Capital Injection',
+    badgeClass: 'bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-300 dark:border dark:border-sky-800/60',
+    description: 'Cash infusion to support daily operations and inventory',
+  },
+  LOAN_DEBT: {
+    label: 'Loan / Debt Facility',
+    badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 dark:border dark:border-amber-800/60',
+    description: 'Bank loan or borrowed financing facility',
+  },
+};
+
 const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#eab308', '#6366f1', '#64748b'];
 
 const Financial: React.FC = () => {
@@ -228,6 +259,13 @@ const Financial: React.FC = () => {
     { enabled: user?.role === 'MANAGER' }
   );
 
+  // 6. Investments & Capital Query
+  const { data: investmentsData } = useQuery(
+    ['financial-investments'],
+    () => financialService.getInvestments(),
+    { enabled: user?.role === 'MANAGER' }
+  );
+
   // 6. Users List Query (to populate staff selector)
   const { data: usersData } = useQuery(
     ['all-staff-users'],
@@ -299,6 +337,128 @@ const Financial: React.FC = () => {
       },
     }
   );
+
+  // Capital Investment Mutations
+  const createInvestmentMutation = useMutation(
+    (data: CreateInvestmentData) => financialService.createInvestment(data),
+    {
+      onSuccess: () => {
+        toast.success('Capital investment recorded successfully');
+        queryClient.invalidateQueries(['financial-investments']);
+        queryClient.invalidateQueries(['financial-reports']);
+        setIsInvestmentModalOpen(false);
+        resetInvestmentForm();
+      },
+      onError: (err: any) => {
+        toast.error(err.response?.data?.message || 'Failed to record investment');
+      }
+    }
+  );
+
+  const updateInvestmentMutation = useMutation(
+    ({ id, data }: { id: string; data: Partial<CreateInvestmentData> }) =>
+      financialService.updateInvestment(id, data),
+    {
+      onSuccess: () => {
+        toast.success('Investment record updated successfully');
+        queryClient.invalidateQueries(['financial-investments']);
+        queryClient.invalidateQueries(['financial-reports']);
+        setIsInvestmentModalOpen(false);
+        resetInvestmentForm();
+      },
+      onError: (err: any) => {
+        toast.error(err.response?.data?.message || 'Failed to update investment');
+      }
+    }
+  );
+
+  const deleteInvestmentMutation = useMutation(
+    (id: string) => financialService.deleteInvestment(id),
+    {
+      onSuccess: () => {
+        toast.success('Investment record deleted successfully');
+        queryClient.invalidateQueries(['financial-investments']);
+        queryClient.invalidateQueries(['financial-reports']);
+        setIsDeleteInvestmentModalOpen(false);
+        setDeletingInvestment(null);
+      },
+      onError: (err: any) => {
+        toast.error(err.response?.data?.message || 'Failed to delete investment');
+      }
+    }
+  );
+
+  // Investment Modal States
+  const [isInvestmentModalOpen, setIsInvestmentModalOpen] = useState(false);
+  const [editingInvestment, setEditingInvestment] = useState<GarageInvestment | null>(null);
+  const [formInvestorName, setFormInvestorName] = useState('');
+  const [formInvestmentType, setFormInvestmentType] = useState<InvestmentType>('INITIAL_CAPITAL');
+  const [formInvestmentAmount, setFormInvestmentAmount] = useState('');
+  const [formInvestmentDate, setFormInvestmentDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [formInvestmentPaymentMethod, setFormInvestmentPaymentMethod] = useState<ExpensePaymentMethod>('BANK_TRANSFER');
+  const [formInvestmentRef, setFormInvestmentRef] = useState('');
+  const [formInvestmentNotes, setFormInvestmentNotes] = useState('');
+
+  const [deletingInvestment, setDeletingInvestment] = useState<GarageInvestment | null>(null);
+  const [isDeleteInvestmentModalOpen, setIsDeleteInvestmentModalOpen] = useState(false);
+
+  const resetInvestmentForm = () => {
+    setFormInvestorName('');
+    setFormInvestmentType('INITIAL_CAPITAL');
+    setFormInvestmentAmount('');
+    setFormInvestmentDate(format(new Date(), 'yyyy-MM-dd'));
+    setFormInvestmentPaymentMethod('BANK_TRANSFER');
+    setFormInvestmentRef('');
+    setFormInvestmentNotes('');
+    setEditingInvestment(null);
+  };
+
+  const handleOpenAddInvestmentModal = (defaultType?: InvestmentType) => {
+    resetInvestmentForm();
+    if (defaultType) setFormInvestmentType(defaultType);
+    setIsInvestmentModalOpen(true);
+  };
+
+  const handleOpenEditInvestmentModal = (inv: GarageInvestment) => {
+    setEditingInvestment(inv);
+    setFormInvestorName(inv.investor_name);
+    setFormInvestmentType(inv.investment_type);
+    setFormInvestmentAmount(String(inv.amount));
+    setFormInvestmentDate(inv.investment_date ? inv.investment_date.split('T')[0] : format(new Date(), 'yyyy-MM-dd'));
+    setFormInvestmentPaymentMethod(inv.payment_method);
+    setFormInvestmentRef(inv.reference_number || '');
+    setFormInvestmentNotes(inv.notes || '');
+    setIsInvestmentModalOpen(true);
+  };
+
+  const handleSubmitInvestment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formInvestorName.trim()) {
+      toast.error('Please enter investor/contributor name');
+      return;
+    }
+    const amt = parseFloat(formInvestmentAmount);
+    if (isNaN(amt) || amt <= 0) {
+      toast.error('Please enter a valid positive investment amount');
+      return;
+    }
+
+    const payload: CreateInvestmentData = {
+      investorName: formInvestorName.trim(),
+      investmentType: formInvestmentType,
+      amount: amt,
+      investmentDate: formInvestmentDate,
+      paymentMethod: formInvestmentPaymentMethod,
+      referenceNumber: formInvestmentRef.trim() || undefined,
+      notes: formInvestmentNotes.trim() || undefined,
+    };
+
+    if (editingInvestment) {
+      updateInvestmentMutation.mutate({ id: editingInvestment.id, data: payload });
+    } else {
+      createInvestmentMutation.mutate(payload);
+    }
+  };
 
   const resetForm = () => {
     setFormTitle('');
@@ -445,6 +605,13 @@ const Financial: React.FC = () => {
         {/* Quick Action Buttons */}
         <div className="flex flex-wrap items-center gap-2.5">
           <button
+            onClick={() => handleOpenAddInvestmentModal()}
+            className="btn btn-secondary text-xs py-2 px-3.5 flex items-center gap-1.5 shadow-xs text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/40"
+          >
+            <Landmark className="h-4 w-4 text-purple-500" />
+            <span>+ Add Investment</span>
+          </button>
+          <button
             onClick={() => handleOpenAddModal('SALARY', 'OPEX')}
             className="btn btn-secondary text-xs py-2 px-3.5 flex items-center gap-1.5 shadow-xs"
           >
@@ -509,8 +676,13 @@ const Financial: React.FC = () => {
               : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
         >
-          <Building2 className="h-4 w-4" />
-          <span>Garage Setup & Assets (CapEx)</span>
+          <Landmark className="h-4 w-4 text-purple-500" />
+          <span>Garage Capital, Setup & Assets (CapEx)</span>
+          {investmentsData?.investments?.length ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 font-mono">
+              {investmentsData.investments.length} inv
+            </span>
+          ) : null}
         </button>
       </div>
 
@@ -519,6 +691,42 @@ const Financial: React.FC = () => {
       {/* ========================================================================= */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          {/* Executive Capital & Working Liquidity Bar */}
+          <div className="p-4 sm:p-5 rounded-xl bg-gradient-to-r from-purple-950/50 via-slate-900 to-indigo-950/50 border border-purple-800/40 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+            <div className="flex items-center gap-3.5">
+              <div className="p-3 rounded-xl bg-purple-600/20 text-purple-300 border border-purple-500/30">
+                <Landmark className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300">
+                  Garage Working Capital & Liquidity Position
+                </span>
+                <h3 className="text-lg font-extrabold text-white">
+                  Total Capital Invested: {formatCurrency(investmentsData?.totalInvested || 0)}
+                </h3>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Initial setup funds, partner equity, and active capital reserve deployed in garage infrastructure.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                onClick={() => handleOpenAddInvestmentModal()}
+                className="btn btn-primary text-xs py-2 px-3.5 flex items-center gap-1.5 shadow-sm"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>+ Add Capital / Investment</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('capex')}
+                className="btn btn-secondary text-xs py-2 px-3 flex items-center gap-1.5"
+              >
+                <span>View Capital & CapEx Assets</span>
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
           {/* Controls: Segmented Period + Date Picker */}
           <div className="card p-4 sm:p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -1568,190 +1776,384 @@ const Financial: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 4: GARAGE SETUP & CAPITAL ASSETS (CAPEX) */}
+      {/* TAB 4: GARAGE CAPITAL, SETUP & ASSETS (CAPEX) */}
       {/* ========================================================================= */}
       {activeTab === 'capex' && (
         <div className="space-y-6">
-          {/* Header CapEx Valuation Card */}
+          {/* Header Capital Position & Valuation Card */}
           <div className="card p-6 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
               <div>
                 <span className="text-xs font-semibold px-2.5 py-1 rounded bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 uppercase tracking-wider font-mono">
-                  Fixed Capital Assets & Balance Sheet Valuation
+                  Owner Equity, Capital Setup & Fixed Assets
                 </span>
                 <h3 className="text-xl font-bold text-gray-900 dark:text-slate-100 mt-2">
-                  Garage Setup, Infrastructure & Machinery Assets
+                  Garage Capital Inflow & Fixed Asset Valuation
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
-                  Unlike recurring monthly operating costs (OpEx), Capital Expenditures (CapEx) represent long-term
-                  investments in physical assets—such as structural workshop bays, epoxy flooring, 2-post car lifts, air
-                  compressors, diagnostic scanners, and heavy machinery. These investments establish garage equity and
-                  production capacity.
+                  Track the initial investment put into founding the garage, additional partner equity, and capital expenditures (CapEx) spent on structural bays, car lifts, air compressors, and machinery.
                 </p>
               </div>
 
-              <div className="p-4 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60 text-right min-w-[220px]">
-                <p className="text-xs font-semibold text-purple-700 dark:text-purple-300">Total Workshop Asset Value</p>
-                <p className="text-3xl font-extrabold text-purple-600 dark:text-purple-400 font-mono mt-0.5">
-                  {formatCurrency(financialData?.summary.allTimeCapex)}
-                </p>
-                <button
-                  onClick={() => handleOpenAddModal('GARAGE_SETUP', 'CAPEX')}
-                  className="mt-3 btn btn-primary text-xs w-full py-1.5 flex items-center justify-center gap-1.5"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Add Capital Asset</span>
-                </button>
-              </div>
-            </div>
-          </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-[320px]">
+                <div className="p-3.5 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60">
+                  <p className="text-xs font-semibold text-purple-700 dark:text-purple-300">Total Capital Invested</p>
+                  <p className="text-2xl font-extrabold text-purple-600 dark:text-purple-400 font-mono mt-0.5">
+                    {formatCurrency(investmentsData?.totalInvested || 0)}
+                  </p>
+                  <button
+                    onClick={() => handleOpenAddInvestmentModal()}
+                    className="mt-2.5 btn btn-primary text-xs w-full py-1.5 flex items-center justify-center gap-1.5 shadow-sm"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>+ Add Investment</span>
+                  </button>
+                </div>
 
-          {/* CapEx Asset Categories Breakdown */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
-                  <Building2 className="h-5 w-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-gray-900 dark:text-slate-100">Garage Setup & Civil Bays</h4>
-                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Flooring, structural bays, signboards</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-lg bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400">
-                  <Wrench className="h-5 w-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-gray-900 dark:text-slate-100">Car Lifts & Compressors</h4>
-                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Hydraulic 2-post lifts, screw compressors</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400">
-                  <Layers className="h-5 w-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-gray-900 dark:text-slate-100">Diagnostic & Pro Scanners</h4>
-                  <p className="text-[11px] text-gray-500 dark:text-slate-400">OBD-II scanners, ECU flashes, battery testers</p>
+                <div className="p-3.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/60">
+                  <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">Workshop Asset Value</p>
+                  <p className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 font-mono mt-0.5">
+                    {formatCurrency(financialData?.summary.allTimeCapex)}
+                  </p>
+                  <button
+                    onClick={() => handleOpenAddModal('GARAGE_SETUP', 'CAPEX')}
+                    className="mt-2.5 btn btn-secondary text-xs w-full py-1.5 flex items-center justify-center gap-1.5"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>+ Add Capital Asset</span>
+                  </button>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* CapEx Assets Table (Filtered from expensesData where expense_type === 'CAPEX') */}
-          <div className="card overflow-hidden bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-            <div className="px-5 py-4 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">
-              <h4 className="text-sm font-bold text-gray-900 dark:text-slate-100">
-                Workshop Capital Asset Register
-              </h4>
+          {/* Section 1: Capital Investment Inflow Contributions */}
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-bold text-gray-900 dark:text-slate-100 flex items-center gap-2">
+                  <Landmark className="h-4 w-4 text-purple-500" />
+                  <span>Garage Capital & Investment Ledger</span>
+                </h4>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                  Initial founder capital, partner shares, and financial injections into the garage
+                </p>
+              </div>
+
+              <button
+                onClick={() => handleOpenAddInvestmentModal()}
+                className="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 self-start text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/40"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Record New Investment</span>
+              </button>
+            </div>
+
+            {/* Investment Type Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              <div className="card p-3.5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+                <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-slate-400 block tracking-wider">
+                  Initial Launch Capital
+                </span>
+                <p className="text-lg font-bold text-purple-600 dark:text-purple-400 font-mono mt-0.5">
+                  {formatCurrency(investmentsData?.byType?.INITIAL_CAPITAL || 0)}
+                </p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Founding setup capital</p>
+              </div>
+
+              <div className="card p-3.5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+                <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-slate-400 block tracking-wider">
+                  Partner / Equity Shares
+                </span>
+                <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">
+                  {formatCurrency(investmentsData?.byType?.PARTNER_EQUITY || 0)}
+                </p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Partner capital contributions</p>
+              </div>
+
+              <div className="card p-3.5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+                <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-slate-400 block tracking-wider">
+                  Working Capital Infusions
+                </span>
+                <p className="text-lg font-bold text-sky-600 dark:text-sky-400 font-mono mt-0.5">
+                  {formatCurrency(investmentsData?.byType?.WORKING_CAPITAL || 0)}
+                </p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Daily cashflow injections</p>
+              </div>
+
+              <div className="card p-3.5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+                <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-slate-400 block tracking-wider">
+                  Loans & Debt Financing
+                </span>
+                <p className="text-lg font-bold text-amber-600 dark:text-amber-400 font-mono mt-0.5">
+                  {formatCurrency(investmentsData?.byType?.LOAN_DEBT || 0)}
+                </p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Bank loans / credit lines</p>
+              </div>
+            </div>
+
+            {/* Investments Table */}
+            <div className="card overflow-hidden bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-800">
+                  <thead className="bg-gray-50 dark:bg-slate-900/60">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Inv #
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Investor / Contributor
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Type
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Payment Mode
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Reference #
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Amount (₹)
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-slate-800 text-xs">
+                    {(investmentsData?.investments || []).length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="text-center py-8 text-gray-500 dark:text-slate-400">
+                          <Landmark className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                          <p className="font-semibold">No capital investments recorded yet</p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            Click "+ Add Investment" above to record the initial founder seed money, partner shares, or working capital.
+                          </p>
+                        </td>
+                      </tr>
+                    ) : (
+                      (investmentsData?.investments || []).map((inv) => {
+                        const invConfig = INVESTMENT_TYPE_CONFIG[inv.investment_type] || INVESTMENT_TYPE_CONFIG.INITIAL_CAPITAL;
+                        return (
+                          <tr key={inv.id} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/40">
+                            <td className="px-4 py-3 font-mono font-medium text-gray-900 dark:text-slate-200">
+                              {inv.investment_number}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 dark:text-slate-400 font-mono">
+                              {safeFormatDate(inv.investment_date, 'dd MMM yyyy')}
+                            </td>
+                            <td className="px-4 py-3 font-semibold text-gray-900 dark:text-slate-100">
+                              {inv.investor_name}
+                              {inv.notes && (
+                                <p className="text-[11px] text-gray-500 dark:text-slate-400 font-normal mt-0.5 max-w-xs truncate">
+                                  {inv.notes}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${invConfig.badgeClass}`}>
+                                {invConfig.label}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 font-mono text-gray-700 dark:text-slate-300">
+                              {inv.payment_method}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-primary-600 dark:text-primary-400">
+                              {inv.reference_number || '—'}
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-sm text-emerald-600 dark:text-emerald-400 font-mono">
+                              +{formatCurrency(inv.amount)}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => handleOpenEditInvestmentModal(inv)}
+                                  className="p-1.5 rounded-lg text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-primary-400 dark:hover:bg-slate-800"
+                                  title="Edit Investment"
+                                >
+                                  <Edit3 className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setDeletingInvestment(inv);
+                                    setIsDeleteInvestmentModalOpen(true);
+                                  }}
+                                  className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-red-950/40"
+                                  title="Delete Investment"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Fixed Workshop Physical Capital Assets (CapEx) */}
+          <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-slate-800">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-bold text-gray-900 dark:text-slate-100 flex items-center gap-2">
+                  <Wrench className="h-4 w-4 text-cyan-500" />
+                  <span>Workshop Capital Asset Register (CapEx Deployed)</span>
+                </h4>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                  Physical garage equipment, hydraulic car lifts, structural bays, and diagnostics
+                </p>
+              </div>
+
               <button
                 onClick={() => handleOpenAddModal('TOOLS_EQUIPMENT', 'CAPEX')}
-                className="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
+                className="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 self-start"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Record New Tool / Machinery</span>
               </button>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-800">
-                <thead className="bg-gray-50 dark:bg-slate-900/60">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Asset / Exp #
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Acquisition Date
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Asset Description
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Category
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Vendor / Payee
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Invoice Ref
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Asset Cost (₹)
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-slate-800 text-xs">
-                  {(expensesData?.expenses || [])
-                    .filter((e) => e.expense_type === 'CAPEX')
-                    .map((asset) => {
-                      const catConfig = CATEGORY_CONFIG[asset.category] || CATEGORY_CONFIG.GARAGE_SETUP;
-                      return (
-                        <tr key={asset.id} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/40">
-                          <td className="px-4 py-3 font-mono font-medium text-gray-900 dark:text-slate-200">
-                            {asset.expense_number}
-                          </td>
-                          <td className="px-4 py-3 text-gray-600 dark:text-slate-400 font-mono">
-                            {safeFormatDate(asset.expense_date, 'dd MMM yyyy')}
-                          </td>
-                          <td className="px-4 py-3 font-semibold text-gray-900 dark:text-slate-100">
-                            {asset.title}
-                            {asset.notes && (
-                              <p className="text-[11px] text-gray-500 dark:text-slate-400 font-normal mt-0.5">
-                                {asset.notes}
-                              </p>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium ${catConfig.badgeClass}`}
-                            >
-                              <catConfig.icon className="h-3 w-3" />
-                              <span>{catConfig.label}</span>
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-gray-700 dark:text-slate-300">
-                            {asset.payee_recipient || '-'}
-                          </td>
-                          <td className="px-4 py-3 font-mono text-primary-600 dark:text-primary-400">
-                            {asset.invoice_reference || '-'}
-                          </td>
-                          <td className="px-4 py-3 text-right font-bold text-sm text-purple-600 dark:text-purple-400 font-mono">
-                            {formatCurrency(asset.amount)}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                onClick={() => handleOpenEditModal(asset)}
-                                className="p-1.5 rounded-lg text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-primary-400 dark:hover:bg-slate-800"
-                              >
-                                <Edit3 className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setDeletingExpense(asset);
-                                  setIsDeleteModalOpen(true);
-                                }}
-                                className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-red-950/40"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
+            {/* CapEx Asset Categories Breakdown */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
+                    <Building2 className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-900 dark:text-slate-100">Garage Setup & Civil Bays</h4>
+                    <p className="text-[11px] text-gray-500 dark:text-slate-400">Flooring, structural bays, signboards</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400">
+                    <Wrench className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-900 dark:text-slate-100">Car Lifts & Compressors</h4>
+                    <p className="text-[11px] text-gray-500 dark:text-slate-400">Hydraulic 2-post lifts, screw compressors</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400">
+                    <Layers className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-900 dark:text-slate-100">Diagnostic & Pro Scanners</h4>
+                    <p className="text-[11px] text-gray-500 dark:text-slate-400">OBD-II scanners, ECU flashes, battery testers</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* CapEx Assets Table (Filtered from expensesData where expense_type === 'CAPEX') */}
+            <div className="card overflow-hidden bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-800">
+                  <thead className="bg-gray-50 dark:bg-slate-900/60">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Asset / Exp #
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Acquisition Date
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Asset Description
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Category
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Vendor / Payee
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Invoice Ref
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Asset Cost (₹)
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-slate-800 text-xs">
+                    {(expensesData?.expenses || [])
+                      .filter((e) => e.expense_type === 'CAPEX')
+                      .map((asset) => {
+                        const catConfig = CATEGORY_CONFIG[asset.category] || CATEGORY_CONFIG.GARAGE_SETUP;
+                        return (
+                          <tr key={asset.id} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/40">
+                            <td className="px-4 py-3 font-mono font-medium text-gray-900 dark:text-slate-200">
+                              {asset.expense_number}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 dark:text-slate-400 font-mono">
+                              {safeFormatDate(asset.expense_date, 'dd MMM yyyy')}
+                            </td>
+                            <td className="px-4 py-3 font-semibold text-gray-900 dark:text-slate-100">
+                              {asset.title}
+                              {asset.notes && (
+                                <p className="text-[11px] text-gray-500 dark:text-slate-400 font-normal mt-0.5">
+                                  {asset.notes}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${catConfig.badgeClass}`}>
+                                {catConfig.label}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-700 dark:text-slate-300">
+                              {asset.payee_recipient || '—'}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-primary-600 dark:text-primary-400">
+                              {asset.invoice_reference || '—'}
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-sm text-purple-600 dark:text-purple-400 font-mono">
+                              {formatCurrency(asset.amount)}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => handleOpenEditModal(asset)}
+                                  className="p-1.5 rounded-lg text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-primary-400 dark:hover:bg-slate-800"
+                                  title="Edit Asset"
+                                >
+                                  <Edit3 className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setDeletingExpense(asset);
+                                    setIsDeleteModalOpen(true);
+                                  }}
+                                  className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-red-950/40"
+                                  title="Delete Asset"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -2180,6 +2582,213 @@ const Financial: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* RECORD / EDIT CAPITAL INVESTMENT MODAL */}
+      {/* ========================================================================= */}
+      {isInvestmentModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="card max-w-lg w-full bg-white dark:bg-[#0d1220] border border-gray-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-900/80 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400">
+                  <Landmark className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                    {editingInvestment ? 'Edit Capital Investment' : 'Record Capital / Initial Investment'}
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">
+                    {editingInvestment ? `Update ${editingInvestment.investment_number}` : 'Record founder funds, partner shares, or working capital injected'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsInvestmentModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 p-1"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitInvestment} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                  Investor / Contributor Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Pratheep Kumar (Founder), Ramannathan (Partner)"
+                  className="input text-xs w-full"
+                  value={formInvestorName}
+                  onChange={(e) => setFormInvestorName(e.target.value)}
+                  autoFocus
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                    Investment Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    className="input text-xs w-full"
+                    value={formInvestmentType}
+                    onChange={(e) => setFormInvestmentType(e.target.value as InvestmentType)}
+                  >
+                    <option value="INITIAL_CAPITAL">Initial Setup Capital (Launch Fund)</option>
+                    <option value="PARTNER_EQUITY">Partner / Shareholder Equity</option>
+                    <option value="WORKING_CAPITAL">Additional Working Capital</option>
+                    <option value="LOAN_DEBT">Loan / Financing Facility</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                    Investment Amount (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">
+                      ₹
+                    </span>
+                    <input
+                      type="number"
+                      step="any"
+                      min="1"
+                      required
+                      placeholder="e.g. 500000"
+                      className="input pl-8 text-xs w-full font-mono font-bold text-emerald-600 dark:text-emerald-400"
+                      value={formInvestmentAmount}
+                      onChange={(e) => setFormInvestmentAmount(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                    Deposit / Investment Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    className="input text-xs w-full font-mono"
+                    value={formInvestmentDate}
+                    onChange={(e) => setFormInvestmentDate(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                    Payment Method
+                  </label>
+                  <select
+                    className="input text-xs w-full"
+                    value={formInvestmentPaymentMethod}
+                    onChange={(e) => setFormInvestmentPaymentMethod(e.target.value as ExpensePaymentMethod)}
+                  >
+                    <option value="BANK_TRANSFER">Bank Transfer (NEFT/RTGS/IMPS)</option>
+                    <option value="UPI">UPI / GooglePay / PhonePe</option>
+                    <option value="CHEQUE">Cheque</option>
+                    <option value="CASH">Cash Deposit</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                  Bank Reference / Cheque / UTR #
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. UTR-98234823, Cheque #49281"
+                  className="input text-xs w-full font-mono"
+                  value={formInvestmentRef}
+                  onChange={(e) => setFormInvestmentRef(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                  Notes & Investment Terms
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. 50% initial seed capital for workshop civil setup and tools purchase"
+                  className="input text-xs w-full py-2"
+                  value={formInvestmentNotes}
+                  onChange={(e) => setFormInvestmentNotes(e.target.value)}
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsInvestmentModalOpen(false)}
+                  className="btn btn-secondary text-xs py-2 px-3.5"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createInvestmentMutation.isLoading || updateInvestmentMutation.isLoading}
+                  className="btn btn-primary text-xs py-2 px-4 flex items-center gap-1.5"
+                >
+                  {createInvestmentMutation.isLoading || updateInvestmentMutation.isLoading ? (
+                    <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white"></div>
+                  ) : (
+                    <span>{editingInvestment ? 'Update Investment' : 'Save Investment'}</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Investment Confirmation Modal */}
+      {isDeleteInvestmentModalOpen && deletingInvestment && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="card max-w-sm w-full p-6 bg-white dark:bg-[#0d1220] border border-gray-200 dark:border-slate-800 rounded-2xl shadow-xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-full bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400">
+                <AlertCircle className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-white">Delete Investment Record</h3>
+                <p className="text-xs text-gray-500 dark:text-slate-400">This action cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-600 dark:text-slate-300">
+              Are you sure you want to delete investment from <strong className="text-gray-900 dark:text-white">"{deletingInvestment.investor_name}"</strong> ({formatCurrency(deletingInvestment.amount)}) from the capital ledger?
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteInvestmentModalOpen(false);
+                  setDeletingInvestment(null);
+                }}
+                className="btn btn-secondary text-xs py-2 px-4"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteInvestmentMutation.isLoading}
+                onClick={() => deleteInvestmentMutation.mutate(deletingInvestment.id)}
+                className="btn bg-red-600 hover:bg-red-700 text-white text-xs py-2 px-4 font-semibold rounded-lg"
+              >
+                {deleteInvestmentMutation.isLoading ? 'Deleting...' : 'Delete Investment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

@@ -122,6 +122,12 @@ router.get('/report', requireRoleOrScope(['MANAGER'], 'financial'), async (req: 
        WHERE expense_type = 'CAPEX'`
     );
 
+    // All-time Capital & Owner Investments Injected
+    const allTimeInvestmentsResult = await query(
+      'SELECT COALESCE(SUM(amount), 0) as all_time_investments FROM garage_investments'
+    );
+    const allTimeInvestments = parseFloat(allTimeInvestmentsResult.rows[0].all_time_investments) || 0;
+
     // 7. Expenses categorized breakdown during period
     const categoryExpensesResult = await query(
       `SELECT category, expense_type, COUNT(*) as count, COALESCE(SUM(amount), 0) as amount
@@ -221,6 +227,8 @@ router.get('/report', requireRoleOrScope(['MANAGER'], 'financial'), async (req: 
         opex: totalOpex,
         capex: totalCapex,
         allTimeCapex,
+        allTimeInvestments,
+        netWorkingCapital: allTimeInvestments + totalRevenue - (totalCogs + totalOpex + allTimeCapex),
         grossProfit,
         grossProfitMargin,
         netProfit,
@@ -718,6 +726,178 @@ router.put('/staff-salary/:userId', requireRoleOrScope(['MANAGER'], 'financial')
     });
   } catch (error: any) {
     console.error('Update staff salary error:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+// ============================================================================
+// 9. GARAGE CAPITAL & OWNER INVESTMENTS
+// ============================================================================
+
+// Get all investments & capital summary
+router.get('/investments', requireRoleOrScope(['MANAGER'], 'financial'), async (req: AuthRequest, res) => {
+  try {
+    const result = await query(`
+      SELECT 
+        gi.*,
+        u.name as creator_name
+      FROM garage_investments gi
+      LEFT JOIN users u ON gi.created_by = u.id
+      ORDER BY gi.investment_date DESC, gi.created_at DESC
+    `);
+
+    const totalInvested = result.rows.reduce((sum, inv) => sum + parseFloat(inv.amount || '0'), 0);
+
+    const byType: Record<string, number> = {
+      INITIAL_CAPITAL: 0,
+      PARTNER_EQUITY: 0,
+      WORKING_CAPITAL: 0,
+      LOAN_DEBT: 0
+    };
+
+    for (const r of result.rows) {
+      const t = r.investment_type || 'INITIAL_CAPITAL';
+      byType[t] = (byType[t] || 0) + parseFloat(r.amount || '0');
+    }
+
+    res.json({
+      investments: result.rows,
+      totalInvested,
+      byType
+    });
+  } catch (error: any) {
+    console.error('Get investments error:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+// Create new capital investment
+router.post('/investments', requireRoleOrScope(['MANAGER'], 'financial'), async (req: AuthRequest, res) => {
+  try {
+    const {
+      investorName,
+      investmentType = 'INITIAL_CAPITAL',
+      amount,
+      investmentDate = new Date().toISOString().split('T')[0],
+      paymentMethod = 'BANK_TRANSFER',
+      referenceNumber,
+      notes
+    } = req.body;
+
+    if (!investorName || !investorName.trim()) {
+      return res.status(400).json({ message: 'Investor/Contributor name is required' });
+    }
+
+    const parsedAmount = parseFloat(amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ message: 'Valid positive investment amount is required' });
+    }
+
+    // Generate investment number: INV-YYYY-XXXX
+    const year = new Date(investmentDate).getFullYear() || new Date().getFullYear();
+    const countResult = await query(
+      'SELECT COUNT(*) as count FROM garage_investments WHERE EXTRACT(YEAR FROM investment_date) = $1',
+      [year]
+    );
+    const nextNum = (parseInt(countResult.rows[0].count, 10) + 1).toString().padStart(4, '0');
+    const investmentNumber = `INV-${year}-${nextNum}`;
+
+    const insertResult = await query(
+      `INSERT INTO garage_investments (
+        investment_number, investor_name, investment_type, amount, investment_date, payment_method, reference_number, notes, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *`,
+      [
+        investmentNumber,
+        investorName.trim(),
+        investmentType,
+        parsedAmount,
+        investmentDate,
+        paymentMethod,
+        referenceNumber ? referenceNumber.trim() : null,
+        notes ? notes.trim() : null,
+        req.user?.id || null
+      ]
+    );
+
+    res.status(201).json({
+      message: 'Capital investment recorded successfully',
+      investment: insertResult.rows[0]
+    });
+  } catch (error: any) {
+    console.error('Create investment error:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+// Update investment
+router.put('/investments/:id', requireRoleOrScope(['MANAGER'], 'financial'), async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      investorName,
+      investmentType,
+      amount,
+      investmentDate,
+      paymentMethod,
+      referenceNumber,
+      notes
+    } = req.body;
+
+    const parsedAmount = parseFloat(amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ message: 'Valid positive investment amount is required' });
+    }
+
+    const updateResult = await query(
+      `UPDATE garage_investments
+       SET investor_name = $1,
+           investment_type = $2,
+           amount = $3,
+           investment_date = $4,
+           payment_method = $5,
+           reference_number = $6,
+           notes = $7,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $8
+       RETURNING *`,
+      [
+        investorName.trim(),
+        investmentType,
+        parsedAmount,
+        investmentDate,
+        paymentMethod,
+        referenceNumber ? referenceNumber.trim() : null,
+        notes ? notes.trim() : null,
+        id
+      ]
+    );
+
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Investment not found' });
+    }
+
+    res.json({
+      message: 'Investment record updated successfully',
+      investment: updateResult.rows[0]
+    });
+  } catch (error: any) {
+    console.error('Update investment error:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+// Delete investment
+router.delete('/investments/:id', requireRoleOrScope(['MANAGER'], 'financial'), async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const deleteResult = await query('DELETE FROM garage_investments WHERE id = $1 RETURNING id', [id]);
+    if (deleteResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Investment not found' });
+    }
+    res.json({ message: 'Investment record deleted successfully', deletedId: id });
+  } catch (error: any) {
+    console.error('Delete investment error:', error);
     res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });
