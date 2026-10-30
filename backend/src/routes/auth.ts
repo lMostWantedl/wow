@@ -22,10 +22,10 @@ const registerSchema = Joi.object({
 
 const JWT_SECRET = process.env.JWT_SECRET || 'wings-on-wheels-super-secret-key-2024';
 
-// Generate JWT token
+// Generate JWT token (30 days validity for seamless mobile garage experience)
 const generateToken = (userId: string): string => {
   return jwt.sign({ userId }, JWT_SECRET, {
-    expiresIn: '7d'
+    expiresIn: '30d'
   });
 };
 
@@ -174,7 +174,10 @@ router.get('/me', async (req, res) => {
     };
 
     res.json({ user });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Invalid or expired token' });
+    }
     console.error('Get profile error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }

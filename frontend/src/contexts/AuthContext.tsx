@@ -23,16 +23,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           const userData = JSON.parse(savedUser);
           setUser(userData);
           
-          // Verify token is still valid and refresh latest user scopes
-          const profileRes = await authService.getCurrentUser();
-          if (profileRes?.user) {
-            setUser(profileRes.user);
-            localStorage.setItem('user', JSON.stringify(profileRes.user));
+          // Verify token is still valid and refresh latest user scopes in background
+          try {
+            const profileRes = await authService.getCurrentUser();
+            if (profileRes?.user) {
+              setUser(profileRes.user);
+              localStorage.setItem('user', JSON.stringify(profileRes.user));
+            }
+          } catch (apiError: any) {
+            // ONLY log the user out if the server explicitly confirms the token is invalid/expired (401)
+            // If the server is waking up (Render cold start 502/503), timed out, or offline, KEEP THE USER LOGGED IN!
+            if (apiError.response?.status === 401) {
+              localStorage.removeItem('token');
+              localStorage.removeItem('user');
+              setUser(null);
+            }
           }
-        } catch (error) {
-          // Token is invalid, clear storage
+        } catch (parseError) {
+          // Bad JSON format in localStorage
           localStorage.removeItem('token');
           localStorage.removeItem('user');
+          setUser(null);
         }
       }
       setIsLoading(false);
