@@ -128,6 +128,29 @@ router.get('/report', requireRoleOrScope(['MANAGER'], 'financial'), async (req: 
     );
     const allTimeInvestments = parseFloat(allTimeInvestmentsResult.rows[0].all_time_investments) || 0;
 
+    // All-time Operations & Net Profit
+    const allTimeRevResult = await query(
+      'SELECT COALESCE(SUM(total_amount), 0) as all_time_revenue, COALESCE(SUM(paid_amount), 0) as all_time_paid_revenue FROM bills'
+    );
+    const allTimeRevenue = parseFloat(allTimeRevResult.rows[0].all_time_revenue) || 0;
+
+    const allTimeCogsResult = await query(
+      `SELECT COALESCE(SUM(bsp.quantity * sp.cost), 0) as all_time_cogs
+       FROM bill_spare_parts bsp
+       JOIN spare_parts sp ON bsp.spare_part_id = sp.id`
+    );
+    const allTimeCogs = parseFloat(allTimeCogsResult.rows[0].all_time_cogs) || 0;
+
+    const allTimeOpexResult = await query(
+      `SELECT COALESCE(SUM(amount), 0) as all_time_opex 
+       FROM garage_expenses 
+       WHERE expense_type = 'OPEX'`
+    );
+    const allTimeOpex = parseFloat(allTimeOpexResult.rows[0].all_time_opex) || 0;
+
+    const allTimeGrossProfit = allTimeRevenue - allTimeCogs;
+    const allTimeNetProfit = allTimeGrossProfit - allTimeOpex;
+
     // 7. Expenses categorized breakdown during period
     const categoryExpensesResult = await query(
       `SELECT category, expense_type, COUNT(*) as count, COALESCE(SUM(amount), 0) as amount
@@ -228,7 +251,14 @@ router.get('/report', requireRoleOrScope(['MANAGER'], 'financial'), async (req: 
         capex: totalCapex,
         allTimeCapex,
         allTimeInvestments,
-        netWorkingCapital: allTimeInvestments + totalRevenue - (totalCogs + totalOpex + allTimeCapex),
+        allTimeRevenue,
+        allTimeOpex,
+        allTimeCogs,
+        allTimeGrossProfit,
+        allTimeNetProfit,
+        lifetimeRemainingBalance: allTimeInvestments + allTimeNetProfit - allTimeCapex,
+        periodRemainingBalance: allTimeInvestments + netProfit - allTimeCapex,
+        netWorkingCapital: allTimeInvestments + allTimeNetProfit - allTimeCapex,
         grossProfit,
         grossProfitMargin,
         netProfit,

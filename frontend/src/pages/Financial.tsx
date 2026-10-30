@@ -54,10 +54,18 @@ import {
 import { format, subMonths, isValid } from 'date-fns';
 import toast from 'react-hot-toast';
 
-// Format Indian Currency
-const formatCurrency = (val: number | string | undefined | null): string => {
+// Format Indian Currency (handles positive, negative, and optional + sign)
+const formatCurrency = (val: number | string | undefined | null, showSign: boolean = false): string => {
   const num = typeof val === 'number' ? val : parseFloat(val || '0') || 0;
-  return '₹' + Math.round(num).toLocaleString('en-IN');
+  const rounded = Math.round(num);
+  const absFormatted = Math.abs(rounded).toLocaleString('en-IN');
+  if (rounded < 0) {
+    return `-₹${absFormatted}`;
+  }
+  if (showSign && rounded > 0) {
+    return `+₹${absFormatted}`;
+  }
+  return `₹${absFormatted}`;
 };
 
 const safeFormatDate = (dateStr: string | null | undefined, fmt: string = 'dd MMM yyyy'): string => {
@@ -172,6 +180,9 @@ const Financial: React.FC = () => {
 
   // Navigation tab: 'overview' | 'expenses' | 'salaries' | 'capex'
   const [activeTab, setActiveTab] = useState<'overview' | 'expenses' | 'salaries' | 'capex'>('overview');
+
+  // Remaining Balance View Mode: 'lifetime' (All-Time from inception) | 'period' (Active Date Filter)
+  const [balanceViewMode, setBalanceViewMode] = useState<'lifetime' | 'period'>('lifetime');
 
   // Overview Filters
   const [period, setPeriod] = useState('month');
@@ -578,6 +589,21 @@ const Financial: React.FC = () => {
     }
   };
 
+  // Financial Balance Calculations (Initial Capital + Net Profit - CapEx Setup)
+  const totalCapitalInvested = financialData?.summary.allTimeInvestments ?? investmentsData?.totalInvested ?? 0;
+  const allTimeCapEx = financialData?.summary.allTimeCapex ?? 0;
+
+  const isLifetimeMode = balanceViewMode === 'lifetime';
+  const displayNetProfit = isLifetimeMode
+    ? (financialData?.summary.allTimeNetProfit ?? (financialData?.summary.netProfit ?? 0))
+    : (financialData?.summary.netProfit ?? 0);
+
+  const displayRemainingBalance = isLifetimeMode
+    ? (financialData?.summary.lifetimeRemainingBalance ?? (totalCapitalInvested + displayNetProfit - allTimeCapEx))
+    : (financialData?.summary.periodRemainingBalance ?? (totalCapitalInvested + displayNetProfit - allTimeCapEx));
+
+  const isNetSurplus = displayRemainingBalance >= 0;
+
   if (user?.role !== 'MANAGER') {
     return (
       <div className="text-center py-12">
@@ -595,6 +621,16 @@ const Financial: React.FC = () => {
             <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Financial Management</h1>
             <span className="text-xs px-2.5 py-0.5 rounded-full bg-primary-100 text-primary-800 dark:bg-primary-950/70 dark:text-primary-300 font-semibold border border-primary-200 dark:border-primary-800">
               Executive Suite
+            </span>
+            <span
+              className={`text-xs px-2.5 py-0.5 rounded-full font-bold font-mono border hidden sm:inline-flex items-center gap-1.5 ${
+                isNetSurplus
+                  ? 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                  : 'bg-red-50 dark:bg-red-950/70 text-red-700 dark:text-red-300 border-red-300 dark:border-red-800'
+              }`}
+            >
+              <span>Treasury:</span>
+              <span>{formatCurrency(displayRemainingBalance, true)}</span>
             </span>
           </div>
           <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
@@ -691,40 +727,229 @@ const Financial: React.FC = () => {
       {/* ========================================================================= */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          {/* Executive Capital & Working Liquidity Bar */}
-          <div className="p-4 sm:p-5 rounded-xl bg-gradient-to-r from-purple-950/50 via-slate-900 to-indigo-950/50 border border-purple-800/40 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
-            <div className="flex items-center gap-3.5">
-              <div className="p-3 rounded-xl bg-purple-600/20 text-purple-300 border border-purple-500/30">
-                <Landmark className="h-6 w-6" />
+          {/* ========================================================================= */}
+          {/* MASTER TREASURY & NET REMAINING BALANCE HERO CARD */}
+          {/* ========================================================================= */}
+          <div
+            className={`p-5 sm:p-6 rounded-2xl border transition-all duration-200 shadow-md ${
+              isNetSurplus
+                ? 'bg-gradient-to-br from-emerald-950/40 via-slate-900/95 to-slate-950 border-emerald-500/30 dark:border-emerald-700/40'
+                : 'bg-gradient-to-br from-red-950/40 via-slate-900/95 to-slate-950 border-red-500/30 dark:border-red-700/40'
+            }`}
+          >
+            {/* Top Bar: Title, Status Badge, Period Toggle, Actions */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div
+                  className={`p-3 rounded-2xl border ${
+                    isNetSurplus
+                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                      : 'bg-red-500/15 text-red-400 border-red-500/30'
+                  }`}
+                >
+                  <Landmark className="h-7 w-7" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                      Garage Treasury Liquidity Position
+                    </span>
+                    <span
+                      className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                        isNetSurplus
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          : 'bg-red-500/20 text-red-300 border border-red-500/40'
+                      }`}
+                    >
+                      {isNetSurplus ? '● Positive Cash Reserve' : '▲ Net Cash Deficit / Shortfall'}
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-semibold text-slate-400 mt-0.5">
+                    Net Remaining Balance = Total Initial Capital + Net Profit − Workshop CapEx Setup
+                  </h3>
+                </div>
               </div>
+
+              {/* View Toggle & Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex bg-slate-950/80 p-0.5 rounded-lg border border-slate-800 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setBalanceViewMode('lifetime')}
+                    className={`px-3 py-1 rounded-md transition-all ${
+                      balanceViewMode === 'lifetime'
+                        ? 'bg-purple-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Lifetime (All-Time)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBalanceViewMode('period')}
+                    className={`px-3 py-1 rounded-md transition-all ${
+                      balanceViewMode === 'period'
+                        ? 'bg-purple-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Selected Period ({period.toUpperCase()})
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => handleOpenAddInvestmentModal()}
+                  className="btn btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-sm"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>+ Add Investment</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('capex')}
+                  className="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
+                >
+                  <span>CapEx Ledger</span>
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Middle Section: Big Display of Remaining Amount */}
+            <div className="py-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300">
-                  Garage Working Capital & Liquidity Position
-                </span>
-                <h3 className="text-lg font-extrabold text-white">
-                  Total Capital Invested: {formatCurrency(investmentsData?.totalInvested || 0)}
-                </h3>
-                <p className="text-xs text-slate-300 mt-0.5">
-                  Initial setup funds, partner equity, and active capital reserve deployed in garage infrastructure.
+                <p className="text-xs font-medium text-slate-400">
+                  {balanceViewMode === 'lifetime'
+                    ? 'Total All-Time Remaining Cash In-Hand / Bank Balance'
+                    : `Remaining Cash Balance for Selected Period (${period.toUpperCase()})`}
+                </p>
+                <div className="flex items-baseline gap-3 mt-1">
+                  <p
+                    className={`text-3xl sm:text-4xl lg:text-5xl font-extrabold font-mono tracking-tight ${
+                      isNetSurplus ? 'text-emerald-400' : 'text-red-400'
+                    }`}
+                  >
+                    {formatCurrency(displayRemainingBalance, true)}
+                  </p>
+                  <span
+                    className={`text-xs font-bold px-2.5 py-1 rounded-md uppercase tracking-wider ${
+                      isNetSurplus
+                        ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
+                        : 'bg-red-950/60 text-red-300 border border-red-800/60'
+                    }`}
+                  >
+                    {isNetSurplus ? 'Net Surplus' : 'Net Deficit'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                  {isNetSurplus
+                    ? 'The workshop has positive liquidity. Cumulative invested capital and business profits exceed setup costs and operating expenses.'
+                    : 'Current workshop expenses and equipment setup exceed initial capital and net profits. Consider injecting additional working capital.'}
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5">
-              <button
-                onClick={() => handleOpenAddInvestmentModal()}
-                className="btn btn-primary text-xs py-2 px-3.5 flex items-center gap-1.5 shadow-sm"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>+ Add Capital / Investment</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('capex')}
-                className="btn btn-secondary text-xs py-2 px-3 flex items-center gap-1.5"
-              >
-                <span>View Capital & CapEx Assets</span>
-                <ArrowUpRight className="h-3.5 w-3.5" />
-              </button>
+            {/* Bottom Row: The Step-by-Step Formula Cards */}
+            <div className="pt-4 border-t border-slate-800/80">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                <span>Calculation Breakdown</span>
+                <span className="text-slate-500 font-normal">
+                  ({balanceViewMode === 'lifetime' ? 'All-Time Inception to Date' : 'Active Period View'})
+                </span>
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-stretch">
+                {/* 1. Initial / Capital Invested */}
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-purple-800/40 relative">
+                  <div className="flex items-center justify-between text-xs text-purple-300 font-medium">
+                    <span>1. Capital Invested</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-950/80 text-purple-300 border border-purple-800/60 font-mono">
+                      + INFLOW
+                    </span>
+                  </div>
+                  <p className="text-lg font-bold text-white font-mono mt-1">
+                    +{formatCurrency(totalCapitalInvested)}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Founders & partners equity</p>
+                </div>
+
+                {/* 2. Net Operating Profit / Loss */}
+                <div
+                  className={`p-3.5 rounded-xl bg-slate-900/90 border relative ${
+                    displayNetProfit >= 0 ? 'border-emerald-800/40' : 'border-amber-800/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs font-medium">
+                    <span className={displayNetProfit >= 0 ? 'text-emerald-300' : 'text-amber-300'}>
+                      2. Net Operating {displayNetProfit >= 0 ? 'Profit' : 'Loss'}
+                    </span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded border font-mono ${
+                        displayNetProfit >= 0
+                          ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800/60'
+                          : 'bg-amber-950/80 text-amber-300 border-amber-800/60'
+                      }`}
+                    >
+                      {displayNetProfit >= 0 ? '+ PROFIT' : '- LOSS'}
+                    </span>
+                  </div>
+                  <p
+                    className={`text-lg font-bold font-mono mt-1 ${
+                      displayNetProfit >= 0 ? 'text-emerald-400' : 'text-amber-400'
+                    }`}
+                  >
+                    {formatCurrency(displayNetProfit, true)}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {balanceViewMode === 'lifetime' ? 'All-time gross sales minus costs' : 'Period sales minus costs'}
+                  </p>
+                </div>
+
+                {/* 3. Workshop Setup Assets (CapEx) */}
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-indigo-800/40 relative">
+                  <div className="flex items-center justify-between text-xs text-indigo-300 font-medium">
+                    <span>3. Workshop Setup (CapEx)</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 font-mono">
+                      - OUTFLOW
+                    </span>
+                  </div>
+                  <p className="text-lg font-bold text-indigo-300 font-mono mt-1">
+                    -{formatCurrency(allTimeCapEx)}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Car lifts, machinery, civil bays</p>
+                </div>
+
+                {/* 4. Net Remaining Balance */}
+                <div
+                  className={`p-3.5 rounded-xl border relative ${
+                    isNetSurplus
+                      ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300'
+                      : 'bg-red-950/40 border-red-500/50 text-red-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <span>= Remaining Balance</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded border font-mono uppercase ${
+                        isNetSurplus
+                          ? 'bg-emerald-900/60 text-emerald-200 border-emerald-500/60'
+                          : 'bg-red-900/60 text-red-200 border-red-500/60'
+                      }`}
+                    >
+                      {isNetSurplus ? 'SURPLUS' : 'DEFICIT'}
+                    </span>
+                  </div>
+                  <p
+                    className={`text-lg font-extrabold font-mono mt-1 ${
+                      isNetSurplus ? 'text-emerald-400' : 'text-red-400'
+                    }`}
+                  >
+                    {formatCurrency(displayRemainingBalance, true)}
+                  </p>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    {isNetSurplus ? 'Available cash reserve' : 'Cash deficit / overdrawn'}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
           {/* Controls: Segmented Period + Date Picker */}
@@ -786,7 +1011,7 @@ const Financial: React.FC = () => {
 
           {/* KPI Stat Cards */}
           {financialData && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
               {/* Gross Revenue */}
               <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
                 <div className="flex items-center justify-between">
@@ -878,6 +1103,51 @@ const Financial: React.FC = () => {
                   </div>
                   <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 border border-purple-100 dark:border-purple-900/50">
                     <Building2 className="h-6 w-6" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Net Remaining Treasury Balance (Surplus / Deficit) */}
+              <div
+                className={`card p-5 border rounded-xl shadow-xs transition-all ${
+                  isNetSurplus
+                    ? 'bg-emerald-950/10 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/80'
+                    : 'bg-red-950/10 dark:bg-red-950/20 border-red-300 dark:border-red-800/80'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-semibold text-gray-700 dark:text-slate-300">Net Remaining Balance</p>
+                      <span
+                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                          isNetSurplus
+                            ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-300'
+                        }`}
+                      >
+                        {isNetSurplus ? 'Surplus' : 'Deficit'}
+                      </span>
+                    </div>
+                    <p
+                      className={`text-2xl font-bold font-mono mt-1 ${
+                        isNetSurplus ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+                      }`}
+                    >
+                      {formatCurrency(displayRemainingBalance, true)}
+                    </p>
+                    <div className="flex items-center gap-1 mt-2 text-[11px] text-gray-500 dark:text-slate-400">
+                      <span>Capital + Profit − CapEx</span>
+                    </div>
+                  </div>
+                  <div
+                    className={`p-3 rounded-xl border ${
+                      isNetSurplus
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/50'
+                        : 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border-red-100 dark:border-red-900/50'
+                    }`}
+                  >
+                    <Landmark className="h-6 w-6" />
                   </div>
                 </div>
               </div>
@@ -1795,11 +2065,11 @@ const Financial: React.FC = () => {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-[320px]">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 min-w-[320px]">
                 <div className="p-3.5 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60">
                   <p className="text-xs font-semibold text-purple-700 dark:text-purple-300">Total Capital Invested</p>
                   <p className="text-2xl font-extrabold text-purple-600 dark:text-purple-400 font-mono mt-0.5">
-                    {formatCurrency(investmentsData?.totalInvested || 0)}
+                    {formatCurrency(totalCapitalInvested)}
                   </p>
                   <button
                     onClick={() => handleOpenAddInvestmentModal()}
@@ -1813,7 +2083,7 @@ const Financial: React.FC = () => {
                 <div className="p-3.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/60">
                   <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">Workshop Asset Value</p>
                   <p className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 font-mono mt-0.5">
-                    {formatCurrency(financialData?.summary.allTimeCapex)}
+                    {formatCurrency(allTimeCapEx)}
                   </p>
                   <button
                     onClick={() => handleOpenAddModal('GARAGE_SETUP', 'CAPEX')}
@@ -1822,6 +2092,43 @@ const Financial: React.FC = () => {
                     <Plus className="h-3.5 w-3.5" />
                     <span>+ Add Capital Asset</span>
                   </button>
+                </div>
+
+                <div
+                  className={`p-3.5 rounded-xl border ${
+                    isNetSurplus
+                      ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60'
+                      : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <p
+                      className={`text-xs font-semibold ${
+                        isNetSurplus ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'
+                      }`}
+                    >
+                      Net Remaining Balance
+                    </p>
+                    <span
+                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                        isNetSurplus
+                          ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200'
+                          : 'bg-red-100 dark:bg-red-900/60 text-red-800 dark:text-red-200'
+                      }`}
+                    >
+                      {isNetSurplus ? 'Surplus' : 'Deficit'}
+                    </span>
+                  </div>
+                  <p
+                    className={`text-2xl font-extrabold font-mono mt-0.5 ${
+                      isNetSurplus ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+                    }`}
+                  >
+                    {formatCurrency(displayRemainingBalance, true)}
+                  </p>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-2 font-mono">
+                    Invested + Net Profit − CapEx
+                  </p>
                 </div>
               </div>
             </div>

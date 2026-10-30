@@ -376,6 +376,13 @@ export interface FinancialReport {
     capex?: number;
     allTimeCapex?: number;
     allTimeInvestments?: number;
+    allTimeRevenue?: number;
+    allTimeOpex?: number;
+    allTimeCogs?: number;
+    allTimeGrossProfit?: number;
+    allTimeNetProfit?: number;
+    lifetimeRemainingBalance?: number;
+    periodRemainingBalance?: number;
     netWorkingCapital?: number;
     grossProfit?: number;
     grossProfitMargin?: number;
