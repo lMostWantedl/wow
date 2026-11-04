@@ -115,12 +115,13 @@ const CreateSparePart: React.FC = () => {
       return;
     }
 
+    const { isUniversal, ...restFormData } = formData;
     const payload = {
-      ...formData,
+      ...restFormData,
       category: finalCategory,
-      make: formData.isUniversal ? 'Universal' : formData.make,
-      model: formData.isUniversal ? 'All Models' : formData.model,
-      generation: formData.isUniversal ? 'All Generations' : formData.generation,
+      make: isUniversal ? 'Universal' : formData.make,
+      model: isUniversal ? 'All Models' : formData.model,
+      generation: isUniversal ? 'All Generations' : formData.generation,
       yearStart: formData.yearStart ? parseInt(formData.yearStart, 10) : undefined,
       yearEnd: formData.yearEnd ? parseInt(formData.yearEnd, 10) : undefined,
       price: parseFloat(formData.price) || 0,

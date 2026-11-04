@@ -14,8 +14,8 @@ const createSparePartSchema = Joi.object({
   make: Joi.string().allow('', null).default('Universal'),
   model: Joi.string().allow('', null).default('All Models'),
   generation: Joi.string().allow('', null).default('All Generations'),
-  yearStart: Joi.number().integer().allow(null).optional(),
-  yearEnd: Joi.number().integer().allow(null).optional(),
+  yearStart: Joi.alternatives().try(Joi.number().integer(), Joi.string().allow('', null), Joi.allow(null)).optional(),
+  yearEnd: Joi.alternatives().try(Joi.number().integer(), Joi.string().allow('', null), Joi.allow(null)).optional(),
   variant: Joi.string().allow('', null).default('All Variants'),
   fuelType: Joi.string().allow('', null).default('All'),
   partType: Joi.string().allow('', null).default('OEM Genuine'),
@@ -30,8 +30,10 @@ const createSparePartSchema = Joi.object({
   unit: Joi.string().valid('pieces', 'sets', 'pairs', 'liters', 'ml', 'kg', 'grams', 'gallons', 'quarts', 'pints', 'lbs', 'oz').default('pieces'),
   unitType: Joi.string().valid('discrete', 'liquid', 'weight').default('discrete'),
   supplier: Joi.string().allow('', null).optional(),
-  description: Joi.string().allow('', null).optional()
-});
+  description: Joi.string().allow('', null).optional(),
+  isUniversal: Joi.boolean().allow(null).optional(),
+  is_universal: Joi.boolean().allow(null).optional()
+}).unknown(true);
 
 // Helper to map DB row to frontend camelCase object
 export const mapSparePart = (part: any) => ({
@@ -405,8 +407,8 @@ router.post('/', requireRoleOrScope(['TECHNICIAN', 'MANAGER'], 'spare_parts'), a
       make || 'Universal',
       model || 'All Models',
       generation || 'All Generations',
-      yearStart || null,
-      yearEnd || null,
+      (yearStart && !isNaN(parseInt(yearStart, 10))) ? parseInt(yearStart, 10) : null,
+      (yearEnd && !isNaN(parseInt(yearEnd, 10))) ? parseInt(yearEnd, 10) : null,
       variant || 'All Variants',
       fuelType || 'All',
       partType || 'OEM Genuine',
@@ -523,8 +525,8 @@ router.put('/:id', requireRoleOrScope(['TECHNICIAN', 'MANAGER'], 'spare_parts'),
       make || 'Universal',
       model || 'All Models',
       generation || 'All Generations',
-      yearStart || null,
-      yearEnd || null,
+      (yearStart && !isNaN(parseInt(yearStart, 10))) ? parseInt(yearStart, 10) : null,
+      (yearEnd && !isNaN(parseInt(yearEnd, 10))) ? parseInt(yearEnd, 10) : null,
       variant || 'All Variants',
       fuelType || 'All',
       partType || 'OEM Genuine',
