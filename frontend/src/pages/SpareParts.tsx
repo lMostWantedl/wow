@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { sparePartsService } from '../services/spareParts';
 import { Plus, Search, Package, AlertTriangle, Edit, Trash2 } from 'lucide-react';
 import { DEFAULT_SPARE_PART_CATEGORIES } from '../constants/sparePartOptions';
+import toast from 'react-hot-toast';
 
 const SpareParts: React.FC = () => {
   const { user } = useAuth();
@@ -174,13 +175,17 @@ const SpareParts: React.FC = () => {
                             >
                               <Edit className="h-4 w-4" />
                             </button>
-                            {user?.role === 'MANAGER' && (
+                            {(user?.role === 'MANAGER' || user?.scopes?.includes('spare_parts')) && (
                               <button
-                                onClick={() => {
-                                  if (window.confirm('Are you sure you want to delete this spare part?')) {
-                                    sparePartsService.deleteSparePart(part.id).then(() => {
+                                onClick={async () => {
+                                  if (window.confirm(`Are you sure you want to delete "${part.name}"?`)) {
+                                    try {
+                                      await sparePartsService.deleteSparePart(part.id);
+                                      toast.success('Spare part deleted successfully');
                                       refetch();
-                                    });
+                                    } catch (err: any) {
+                                      toast.error(err.response?.data?.message || 'Failed to delete spare part');
+                                    }
                                   }
                                 }}
                                 className="p-1.5 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"

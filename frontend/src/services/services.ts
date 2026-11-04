@@ -13,6 +13,7 @@ export interface ServiceResponse {
 export interface CreateServiceData {
   name: string;
   description?: string;
+  category?: string;
   price: number;
   duration: number;
 }
@@ -22,8 +23,14 @@ export const servicesService = {
     page?: number;
     limit?: number;
     search?: string;
+    category?: string;
   }): Promise<ServicesResponse> => {
     const response = await api.get('/services', { params });
+    return response.data;
+  },
+
+  getCategories: async (): Promise<{ categories: string[] }> => {
+    const response = await api.get('/services/categories');
     return response.data;
   },
 

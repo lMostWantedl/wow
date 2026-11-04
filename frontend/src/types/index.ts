@@ -63,6 +63,7 @@ export interface Service {
   id: string;
   name: string;
   description?: string;
+  category?: string;
   price: number;
   duration: number;
   isActive: boolean;
@@ -223,6 +224,15 @@ export interface DashboardData {
     pendingBills?: number;
     managerRecentBills?: Bill[];
     monthlyRevenue?: any[];
+
+    // Job Cards Data
+    totalJobCards?: number;
+    activeJobCardsCount?: number;
+    inProgressJobCardsCount?: number;
+    readyOrEstimatedJobCardsCount?: number;
+    completedJobCardsCount?: number;
+    recentJobCards?: any[];
+    jobCards?: any[];
   };
 }
 

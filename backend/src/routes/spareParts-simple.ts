@@ -1,6 +1,6 @@
 import express from 'express';
 import { query } from '../database/connection';
-import { AuthRequest, requireRole } from '../middleware/auth';
+import { AuthRequest, requireRole, requireRoleOrScope } from '../middleware/auth';
 import Joi from 'joi';
 
 const router = express.Router();
@@ -383,6 +383,34 @@ router.get('/alerts/low-stock', async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Get low stock items error:', error);
     res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Delete spare part
+router.delete('/:id', requireRoleOrScope(['MANAGER'], 'spare_parts'), async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+
+    const existingResult = await query('SELECT id, name FROM spare_parts WHERE id = $1', [id]);
+    if (existingResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Spare part not found' });
+    }
+
+    try {
+      // Attempt hard delete first
+      await query('DELETE FROM spare_parts WHERE id = $1', [id]);
+      res.json({ message: 'Spare part deleted successfully' });
+    } catch (fkError: any) {
+      // If referenced in bills or job cards, perform soft delete to maintain referential integrity
+      await query(
+        'UPDATE spare_parts SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+        [id]
+      );
+      res.json({ message: 'Spare part archived successfully (referenced in existing records)' });
+    }
+  } catch (error: any) {
+    console.error('Delete spare part error:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });
 

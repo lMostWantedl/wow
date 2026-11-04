@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS services (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
     description TEXT,
+    category VARCHAR(100) DEFAULT 'General',
     base_price DECIMAL(10,2) NOT NULL,
     duration INTEGER DEFAULT 60,
     is_active BOOLEAN DEFAULT true,

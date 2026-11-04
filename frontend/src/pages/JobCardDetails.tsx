@@ -34,7 +34,9 @@ import {
   ArrowRight,
   ExternalLink,
   ChevronRight,
-  DollarSign
+  DollarSign,
+  Search,
+  X
 } from 'lucide-react';
 
 const safeFormatDate = (dateString: string | null | undefined, formatString: string = 'MMM dd, yyyy'): string => {
@@ -83,6 +85,8 @@ const JobCardDetails: React.FC = () => {
   const [extraServicePrice, setExtraServicePrice] = useState('0');
   const [extraServiceIsExtra, setExtraServiceIsExtra] = useState(false);
   const [extraServiceTechIds, setExtraServiceTechIds] = useState<string[]>([]);
+  const [serviceSearchQuery, setServiceSearchQuery] = useState('');
+  const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
 
   const [extraPartId, setExtraPartId] = useState('');
   const [extraPartName, setExtraPartName] = useState('');
@@ -92,6 +96,8 @@ const JobCardDetails: React.FC = () => {
   const [extraPartUnit, setExtraPartUnit] = useState('pieces');
   const [extraPartPrice, setExtraPartPrice] = useState('0');
   const [extraPartIsExtra, setExtraPartIsExtra] = useState(false);
+  const [partSearchQuery, setPartSearchQuery] = useState('');
+  const [isPartDropdownOpen, setIsPartDropdownOpen] = useState(false);
 
   // Convert to invoice states
   const [invoiceDiscount, setInvoiceDiscount] = useState('0');
@@ -119,6 +125,35 @@ const JobCardDetails: React.FC = () => {
   const { data: technicians } = useQuery('technicians', () => usersService.getTechnicians()) as { data: any };
   const { data: servicesCatalog } = useQuery('services', () => servicesService.getServices()) as { data: any };
   const { data: sparePartsCatalog } = useQuery('spareParts', () => sparePartsService.getSpareParts()) as { data: any };
+
+  const catalogServicesList = React.useMemo(() => {
+    return servicesCatalog?.services || (Array.isArray(servicesCatalog) ? servicesCatalog : []);
+  }, [servicesCatalog]);
+
+  const filteredCatalogServices = React.useMemo(() => {
+    if (!serviceSearchQuery.trim()) return catalogServicesList;
+    const q = serviceSearchQuery.toLowerCase();
+    return catalogServicesList.filter((s: any) =>
+      s.name?.toLowerCase().includes(q) ||
+      s.category?.toLowerCase().includes(q) ||
+      s.description?.toLowerCase().includes(q)
+    );
+  }, [catalogServicesList, serviceSearchQuery]);
+
+  const catalogPartsList = React.useMemo(() => {
+    return sparePartsCatalog?.spareParts || (Array.isArray(sparePartsCatalog) ? sparePartsCatalog : []);
+  }, [sparePartsCatalog]);
+
+  const filteredCatalogParts = React.useMemo(() => {
+    if (!partSearchQuery.trim()) return catalogPartsList;
+    const q = partSearchQuery.toLowerCase();
+    return catalogPartsList.filter((p: any) =>
+      p.name?.toLowerCase().includes(q) ||
+      p.part_number?.toLowerCase().includes(q) ||
+      p.category?.toLowerCase().includes(q) ||
+      p.description?.toLowerCase().includes(q)
+    );
+  }, [catalogPartsList, partSearchQuery]);
 
   const jobCard = jobCardData?.jobCard;
 
@@ -288,6 +323,8 @@ const JobCardDetails: React.FC = () => {
     setExtraServicePrice('0');
     setExtraServiceIsExtra(false);
     setExtraServiceTechIds([]);
+    setServiceSearchQuery('');
+    setIsServiceDropdownOpen(false);
   };
 
   const resetPartForm = () => {
@@ -300,6 +337,8 @@ const JobCardDetails: React.FC = () => {
     setExtraPartUnit('pieces');
     setExtraPartPrice('0');
     setExtraPartIsExtra(false);
+    setPartSearchQuery('');
+    setIsPartDropdownOpen(false);
   };
 
   const openAddServiceModal = (isExtra: boolean = false) => {
@@ -328,6 +367,8 @@ const JobCardDetails: React.FC = () => {
     setExtraServiceHours(String(service.hours_qty || 1));
     setExtraServicePrice(String(service.unit_price || 0));
     setExtraServiceIsExtra(Boolean(service.is_extra_work));
+    setServiceSearchQuery(service.service_name || '');
+    setIsServiceDropdownOpen(false);
 
     let tIds: string[] = [];
     if (Array.isArray(service.technician_ids) && service.technician_ids.length > 0) {
@@ -351,6 +392,8 @@ const JobCardDetails: React.FC = () => {
     setExtraPartUnit(part.unit || 'pieces');
     setExtraPartPrice(String(part.unit_price || 0));
     setExtraPartIsExtra(Boolean(part.is_extra_work));
+    setPartSearchQuery(part.part_name || '');
+    setIsPartDropdownOpen(false);
     setShowExtraWorkModal(true);
   };
 
@@ -360,35 +403,6 @@ const JobCardDetails: React.FC = () => {
     );
   };
 
-  const handleSelectCatalogService = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const sId = e.target.value;
-    setExtraServiceId(sId);
-    if (sId) {
-      const found = servicesCatalog?.services?.find((s: any) => s.id === sId) ||
-                    servicesCatalog?.find((s: any) => s.id === sId);
-      if (found) {
-        setExtraServiceName(found.name);
-        setExtraServiceDesc(found.description || '');
-        setExtraServicePrice(found.rate || found.price || '0');
-      }
-    }
-  };
-
-  const handleSelectCatalogPart = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const pId = e.target.value;
-    setExtraPartId(pId);
-    if (pId) {
-      const found = sparePartsCatalog?.spareParts?.find((p: any) => p.id === pId) ||
-                    sparePartsCatalog?.find((p: any) => p.id === pId);
-      if (found) {
-        setExtraPartName(found.name);
-        setExtraPartNumber(found.part_number || '');
-        setExtraPartDesc(found.description || '');
-        setExtraPartPrice(found.price || '0');
-        setExtraPartUnit(found.unit || 'pieces');
-      }
-    }
-  };
 
   const handleAddExtraService = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1404,24 +1418,99 @@ const JobCardDetails: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Catalog quick-picker (Only shown when adding new) */}
+                  {/* Catalog quick-picker (Searchable Combobox) */}
                   {!editingService && (
                     <div>
-                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                        Quick Select from Services Catalog (Optional)
-                      </label>
-                      <select
-                        value={extraServiceId}
-                        onChange={handleSelectCatalogService}
-                        className="input w-full text-xs"
-                      >
-                        <option value="">-- Choose existing service or enter manually --</option>
-                        {(servicesCatalog?.services || servicesCatalog || []).map((s: any) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name} ({formatCurrency(s.rate || s.price)})
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                          Quick Select from Services Catalog (Optional)
+                        </label>
+                        {extraServiceId && (
+                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Catalog Item Linked
+                          </span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={serviceSearchQuery}
+                            onChange={(e) => {
+                              setServiceSearchQuery(e.target.value);
+                              setIsServiceDropdownOpen(true);
+                            }}
+                            onFocus={() => setIsServiceDropdownOpen(true)}
+                            placeholder="Search service catalog by name, category, or keyword..."
+                            className="input pl-9 pr-8 w-full text-xs"
+                          />
+                          {(serviceSearchQuery || extraServiceId) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setServiceSearchQuery('');
+                                setExtraServiceId('');
+                                setIsServiceDropdownOpen(false);
+                              }}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                              title="Clear selection"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Dropdown Popover */}
+                        {isServiceDropdownOpen && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-40"
+                              onClick={() => setIsServiceDropdownOpen(false)}
+                            />
+                            <div className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl divide-y divide-gray-100 dark:divide-slate-800">
+                              {filteredCatalogServices.length > 0 ? (
+                                filteredCatalogServices.map((s: any) => (
+                                  <button
+                                    key={s.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setExtraServiceId(s.id);
+                                      setExtraServiceName(s.name);
+                                      setExtraServiceDesc(s.description || '');
+                                      setExtraServicePrice(String(s.rate || s.price || '0'));
+                                      setServiceSearchQuery(s.name);
+                                      setIsServiceDropdownOpen(false);
+                                    }}
+                                    className="w-full text-left p-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors flex items-center justify-between gap-3"
+                                  >
+                                    <div className="space-y-0.5 min-w-0">
+                                      <p className="text-xs font-bold text-gray-900 dark:text-slate-100 truncate">
+                                        {s.name}
+                                      </p>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium border border-slate-200 dark:border-slate-700">
+                                          {s.category || 'General'}
+                                        </span>
+                                        {s.duration && (
+                                          <span className="text-[10px] text-slate-400">{s.duration} min</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <span className="text-xs font-extrabold text-primary-600 dark:text-primary-400 shrink-0">
+                                      {formatCurrency(s.rate || s.price)}
+                                    </span>
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="p-4 text-center text-xs text-slate-400">
+                                  No catalog services matched "{serviceSearchQuery}". You can enter custom details below.
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -1626,24 +1715,105 @@ const JobCardDetails: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Catalog quick-picker (Only shown when adding new) */}
+                  {/* Catalog quick-picker (Searchable Combobox) */}
                   {!editingPart && (
                     <div>
-                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                        Quick Select from Spare Parts Inventory (Optional)
-                      </label>
-                      <select
-                        value={extraPartId}
-                        onChange={handleSelectCatalogPart}
-                        className="input w-full text-xs"
-                      >
-                        <option value="">-- Choose existing stock part or enter manually --</option>
-                        {(sparePartsCatalog?.spareParts || sparePartsCatalog || []).map((p: any) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} {p.part_number ? `(${p.part_number})` : ''} - {formatCurrency(p.price)} [Stock: {p.stock_quantity}]
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                          Quick Select from Spare Parts Inventory (Optional)
+                        </label>
+                        {extraPartId && (
+                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Inventory Part Linked
+                          </span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={partSearchQuery}
+                            onChange={(e) => {
+                              setPartSearchQuery(e.target.value);
+                              setIsPartDropdownOpen(true);
+                            }}
+                            onFocus={() => setIsPartDropdownOpen(true)}
+                            placeholder="Search inventory by part name, part number, category..."
+                            className="input pl-9 pr-8 w-full text-xs"
+                          />
+                          {(partSearchQuery || extraPartId) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPartSearchQuery('');
+                                setExtraPartId('');
+                                setIsPartDropdownOpen(false);
+                              }}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                              title="Clear selection"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Dropdown Popover */}
+                        {isPartDropdownOpen && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-40"
+                              onClick={() => setIsPartDropdownOpen(false)}
+                            />
+                            <div className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl divide-y divide-gray-100 dark:divide-slate-800">
+                              {filteredCatalogParts.length > 0 ? (
+                                filteredCatalogParts.map((p: any) => {
+                                  const stockQty = Number(p.stock_quantity ?? p.stock ?? 0);
+                                  const isLow = stockQty <= Number(p.min_stock_level ?? p.minStock ?? 5);
+                                  return (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setExtraPartId(p.id);
+                                        setExtraPartName(p.name);
+                                        setExtraPartNumber(p.part_number || '');
+                                        setExtraPartDesc(p.description || '');
+                                        setExtraPartPrice(String(p.price || '0'));
+                                        setExtraPartUnit(p.unit || 'pieces');
+                                        setPartSearchQuery(p.name);
+                                        setIsPartDropdownOpen(false);
+                                      }}
+                                      className="w-full text-left p-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors flex items-center justify-between gap-3"
+                                    >
+                                      <div className="space-y-0.5 min-w-0">
+                                        <p className="text-xs font-bold text-gray-900 dark:text-slate-100 truncate">
+                                          {p.name} {p.part_number ? `(${p.part_number})` : ''}
+                                        </p>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium border border-slate-200 dark:border-slate-700">
+                                            {p.category || 'General'}
+                                          </span>
+                                          <span className={`text-[10px] font-semibold ${isLow ? 'text-red-400' : 'text-slate-400'}`}>
+                                            Stock: {stockQty} {p.unit || 'pcs'}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <span className="text-xs font-extrabold text-primary-600 dark:text-primary-400 shrink-0">
+                                        {formatCurrency(p.price)}
+                                      </span>
+                                    </button>
+                                  );
+                                })
+                              ) : (
+                                <div className="p-4 text-center text-xs text-slate-400">
+                                  No inventory parts matched "{partSearchQuery}". You can enter custom part details below.
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
                   )}
 
