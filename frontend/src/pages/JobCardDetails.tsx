@@ -5,7 +5,7 @@ import { jobCardsService } from '../services/jobCards';
 import { usersService } from '../services/users';
 import { servicesService } from '../services/services';
 import { sparePartsService } from '../services/spareParts';
-import { JobCardStatus } from '../types';
+import { JobCardStatus, JobCardService, JobCardSparePart } from '../types';
 import { format, isValid } from 'date-fns';
 import { useReactToPrint } from 'react-to-print';
 import toast from 'react-hot-toast';
@@ -16,6 +16,8 @@ import {
   Package,
   Plus,
   Trash2,
+  Pencil,
+  Info,
   Printer,
   FileText,
   CheckCircle2,
@@ -69,13 +71,17 @@ const JobCardDetails: React.FC = () => {
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showTechModal, setShowTechModal] = useState(false);
 
+  // Edit item tracking
+  const [editingService, setEditingService] = useState<JobCardService | null>(null);
+  const [editingPart, setEditingPart] = useState<JobCardSparePart | null>(null);
+
   // Extra work form states
   const [extraServiceId, setExtraServiceId] = useState('');
   const [extraServiceName, setExtraServiceName] = useState('');
   const [extraServiceDesc, setExtraServiceDesc] = useState('');
   const [extraServiceHours, setExtraServiceHours] = useState('1');
   const [extraServicePrice, setExtraServicePrice] = useState('0');
-  const [extraServiceTechId, setExtraServiceTechId] = useState('');
+  const [extraServiceTechIds, setExtraServiceTechIds] = useState<string[]>([]);
 
   const [extraPartId, setExtraPartId] = useState('');
   const [extraPartName, setExtraPartName] = useState('');
@@ -171,6 +177,24 @@ const JobCardDetails: React.FC = () => {
     }
   );
 
+  // Update service mutation
+  const updateServiceMutation = useMutation(
+    ({ serviceId, data }: { serviceId: string; data: any }) =>
+      jobCardsService.updateService(id!, serviceId, data),
+    {
+      onSuccess: () => {
+        toast.success('Service updated successfully!');
+        setShowExtraWorkModal(false);
+        setEditingService(null);
+        resetServiceForm();
+        queryClient.invalidateQueries(['job-card', id]);
+      },
+      onError: (err: any) => {
+        toast.error(err.response?.data?.message || 'Failed to update service');
+      }
+    }
+  );
+
   // Remove service mutation
   const removeServiceMutation = useMutation(
     (serviceId: string) => jobCardsService.removeService(id!, serviceId),
@@ -197,6 +221,24 @@ const JobCardDetails: React.FC = () => {
       },
       onError: (err: any) => {
         toast.error(err.response?.data?.message || 'Failed to add spare part');
+      }
+    }
+  );
+
+  // Update spare part mutation
+  const updatePartMutation = useMutation(
+    ({ partId, data }: { partId: string; data: any }) =>
+      jobCardsService.updateSparePart(id!, partId, data),
+    {
+      onSuccess: () => {
+        toast.success('Spare part updated successfully!');
+        setShowExtraWorkModal(false);
+        setEditingPart(null);
+        resetPartForm();
+        queryClient.invalidateQueries(['job-card', id]);
+      },
+      onError: (err: any) => {
+        toast.error(err.response?.data?.message || 'Failed to update spare part');
       }
     }
   );
@@ -236,15 +278,17 @@ const JobCardDetails: React.FC = () => {
   );
 
   const resetServiceForm = () => {
+    setEditingService(null);
     setExtraServiceId('');
     setExtraServiceName('');
     setExtraServiceDesc('');
     setExtraServiceHours('1');
     setExtraServicePrice('0');
-    setExtraServiceTechId('');
+    setExtraServiceTechIds([]);
   };
 
   const resetPartForm = () => {
+    setEditingPart(null);
     setExtraPartId('');
     setExtraPartName('');
     setExtraPartNumber('');
@@ -252,6 +296,60 @@ const JobCardDetails: React.FC = () => {
     setExtraPartQty('1');
     setExtraPartUnit('pieces');
     setExtraPartPrice('0');
+  };
+
+  const openAddServiceModal = () => {
+    resetServiceForm();
+    resetPartForm();
+    setExtraWorkTab('service');
+    setShowExtraWorkModal(true);
+  };
+
+  const openAddPartModal = () => {
+    resetServiceForm();
+    resetPartForm();
+    setExtraWorkTab('part');
+    setShowExtraWorkModal(true);
+  };
+
+  const openEditService = (service: JobCardService) => {
+    setEditingService(service);
+    setEditingPart(null);
+    setExtraWorkTab('service');
+    setExtraServiceId(service.service_id || '');
+    setExtraServiceName(service.service_name);
+    setExtraServiceDesc(service.description || '');
+    setExtraServiceHours(String(service.hours_qty || 1));
+    setExtraServicePrice(String(service.unit_price || 0));
+
+    let tIds: string[] = [];
+    if (Array.isArray(service.technician_ids) && service.technician_ids.length > 0) {
+      tIds = service.technician_ids;
+    } else if (service.technician_id) {
+      tIds = [service.technician_id];
+    }
+    setExtraServiceTechIds(tIds);
+    setShowExtraWorkModal(true);
+  };
+
+  const openEditPart = (part: JobCardSparePart) => {
+    setEditingPart(part);
+    setEditingService(null);
+    setExtraWorkTab('part');
+    setExtraPartId(part.spare_part_id || '');
+    setExtraPartName(part.part_name);
+    setExtraPartNumber(part.part_number || '');
+    setExtraPartDesc(part.description || '');
+    setExtraPartQty(String(part.quantity || 1));
+    setExtraPartUnit(part.unit || 'pieces');
+    setExtraPartPrice(String(part.unit_price || 0));
+    setShowExtraWorkModal(true);
+  };
+
+  const toggleExtraServiceTech = (techId: string) => {
+    setExtraServiceTechIds(prev =>
+      prev.includes(techId) ? prev.filter(t => t !== techId) : [...prev, techId]
+    );
   };
 
   const handleSelectCatalogService = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -290,15 +388,29 @@ const JobCardDetails: React.FC = () => {
       toast.error('Please enter or select a service name');
       return;
     }
-    addServiceMutation.mutate({
-      serviceId: extraServiceId || undefined,
-      serviceName: extraServiceName,
-      description: extraServiceDesc,
-      hoursQty: parseFloat(extraServiceHours) || 1,
-      unitPrice: parseFloat(extraServicePrice) || 0,
-      isExtraWork: true,
-      technicianId: extraServiceTechId || undefined
-    });
+
+    if (editingService) {
+      updateServiceMutation.mutate({
+        serviceId: editingService.id,
+        data: {
+          serviceName: extraServiceName,
+          description: extraServiceDesc,
+          hoursQty: parseFloat(extraServiceHours) || 1,
+          unitPrice: parseFloat(extraServicePrice) || 0,
+          technicianIds: extraServiceTechIds
+        }
+      });
+    } else {
+      addServiceMutation.mutate({
+        serviceId: extraServiceId || undefined,
+        serviceName: extraServiceName,
+        description: extraServiceDesc,
+        hoursQty: parseFloat(extraServiceHours) || 1,
+        unitPrice: parseFloat(extraServicePrice) || 0,
+        isExtraWork: true,
+        technicianIds: extraServiceTechIds
+      });
+    }
   };
 
   const handleAddExtraPart = (e: React.FormEvent) => {
@@ -307,16 +419,31 @@ const JobCardDetails: React.FC = () => {
       toast.error('Please enter or select a spare part');
       return;
     }
-    addPartMutation.mutate({
-      sparePartId: extraPartId || undefined,
-      partName: extraPartName,
-      partNumber: extraPartNumber,
-      description: extraPartDesc,
-      quantity: parseFloat(extraPartQty) || 1,
-      unit: extraPartUnit,
-      unitPrice: parseFloat(extraPartPrice) || 0,
-      isExtraWork: true
-    });
+
+    if (editingPart) {
+      updatePartMutation.mutate({
+        partId: editingPart.id,
+        data: {
+          partName: extraPartName,
+          partNumber: extraPartNumber,
+          description: extraPartDesc,
+          quantity: parseFloat(extraPartQty) || 1,
+          unit: extraPartUnit,
+          unitPrice: parseFloat(extraPartPrice) || 0
+        }
+      });
+    } else {
+      addPartMutation.mutate({
+        sparePartId: extraPartId || undefined,
+        partName: extraPartName,
+        partNumber: extraPartNumber,
+        description: extraPartDesc,
+        quantity: parseFloat(extraPartQty) || 1,
+        unit: extraPartUnit,
+        unitPrice: parseFloat(extraPartPrice) || 0,
+        isExtraWork: true
+      });
+    }
   };
 
   const handleConvertToInvoiceSubmit = (e: React.FormEvent) => {
@@ -471,7 +598,7 @@ const JobCardDetails: React.FC = () => {
           {/* Add Extra Work Button */}
           {!isLocked && (
             <button
-              onClick={() => setShowExtraWorkModal(true)}
+              onClick={openAddServiceModal}
               className="btn bg-amber-600 hover:bg-amber-700 text-white flex items-center gap-1.5 text-xs py-2 px-3 shadow-sm"
               title="Add supplementary work discovered mid-repair"
             >
@@ -774,10 +901,7 @@ const JobCardDetails: React.FC = () => {
             </span>
             {!isLocked && (
               <button
-                onClick={() => {
-                  setExtraWorkTab('service');
-                  setShowExtraWorkModal(true);
-                }}
+                onClick={openAddServiceModal}
                 className="btn btn-secondary text-xs py-1.5 px-2.5 flex items-center gap-1"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -819,11 +943,29 @@ const JobCardDetails: React.FC = () => {
                       {item.description && (
                         <p className="text-[11px] text-slate-400 mt-0.5">{item.description}</p>
                       )}
-                      {item.technician_name && (
+                      {item.assigned_technicians && item.assigned_technicians.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          <span className="text-[10px] text-slate-400 font-medium">Assigned:</span>
+                          {item.assigned_technicians.map((t: any) => (
+                            <span
+                              key={t.id}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary-50 dark:bg-primary-950/60 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-primary-500"></span>
+                              {t.name}
+                              {t.role === 'MANAGER' && (
+                                <span className="text-[8px] px-1 py-0 rounded font-bold uppercase bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300">
+                                  Mgr
+                                </span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      ) : item.technician_name ? (
                         <p className="text-[10px] text-primary-500 font-medium mt-0.5">
                           Assigned: {item.technician_name}
                         </p>
-                      )}
+                      ) : null}
                     </td>
                     <td className="py-3 px-4">
                       {item.is_extra_work ? (
@@ -848,13 +990,22 @@ const JobCardDetails: React.FC = () => {
                     </td>
                     {!isLocked && (
                       <td className="py-3 px-4 text-center">
-                        <button
-                          onClick={() => removeServiceMutation.mutate(item.id)}
-                          className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
-                          title="Remove service"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => openEditService(item)}
+                            className="p-1.5 rounded text-primary-600 dark:text-primary-400 hover:text-primary-800 hover:bg-primary-50 dark:hover:bg-primary-950/50 transition-colors"
+                            title="Edit service & assign technicians"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => removeServiceMutation.mutate(item.id)}
+                            className="p-1.5 rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
+                            title="Remove service"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -905,10 +1056,7 @@ const JobCardDetails: React.FC = () => {
             </span>
             {!isLocked && (
               <button
-                onClick={() => {
-                  setExtraWorkTab('part');
-                  setShowExtraWorkModal(true);
-                }}
+                onClick={openAddPartModal}
                 className="btn btn-secondary text-xs py-1.5 px-2.5 flex items-center gap-1"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -979,13 +1127,22 @@ const JobCardDetails: React.FC = () => {
                     </td>
                     {!isLocked && (
                       <td className="py-3 px-4 text-center">
-                        <button
-                          onClick={() => removePartMutation.mutate(item.id)}
-                          className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
-                          title="Remove spare part"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => openEditPart(item)}
+                            className="p-1.5 rounded text-primary-600 dark:text-primary-400 hover:text-primary-800 hover:bg-primary-50 dark:hover:bg-primary-950/50 transition-colors"
+                            title="Edit spare part"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => removePartMutation.mutate(item.id)}
+                            className="p-1.5 rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
+                            title="Remove spare part"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -1099,75 +1256,105 @@ const JobCardDetails: React.FC = () => {
       </div>
 
       {/* ========================================================================= */}
-      {/* MODAL 1: ADD EXTRA WORK (SERVICE OR SPARE PART)                           */}
+      {/* MODAL 1: ADD / EDIT WORK (SERVICE OR SPARE PART)                           */}
       {/* ========================================================================= */}
       {showExtraWorkModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-[#0e1424] border border-gray-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
-            <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-                <Sparkles className="h-5 w-5" />
+          <div className="bg-white dark:bg-[#0e1424] border border-gray-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2 text-primary-600 dark:text-primary-400">
+                {editingService || editingPart ? (
+                  <Pencil className="h-5 w-5" />
+                ) : (
+                  <Sparkles className="h-5 w-5 text-amber-500" />
+                )}
                 <h3 className="font-bold text-base text-gray-900 dark:text-slate-100">
-                  Add Extra Work / Supplementary
+                  {editingService
+                    ? 'Edit Service / Labor'
+                    : editingPart
+                    ? 'Edit Spare Part / Material'
+                    : 'Add Extra Work / Supplementary'}
                 </h3>
               </div>
               <button
-                onClick={() => setShowExtraWorkModal(false)}
+                onClick={() => {
+                  setShowExtraWorkModal(false);
+                  resetServiceForm();
+                  resetPartForm();
+                }}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold"
               >
                 ✕
               </button>
             </div>
 
-            {/* Sub-tabs: Labor vs Part */}
-            <div className="flex border-b border-gray-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
-              <button
-                type="button"
-                onClick={() => setExtraWorkTab('service')}
-                className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-2 border-b-2 transition-all ${
-                  extraWorkTab === 'service'
-                    ? 'border-primary-500 text-primary-600 dark:text-primary-400 bg-white dark:bg-[#0e1424]'
-                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                <Wrench className="h-4 w-4" />
-                <span>Extra Labor / Service</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setExtraWorkTab('part')}
-                className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-2 border-b-2 transition-all ${
-                  extraWorkTab === 'part'
-                    ? 'border-primary-500 text-primary-600 dark:text-primary-400 bg-white dark:bg-[#0e1424]'
-                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                <Package className="h-4 w-4" />
-                <span>Extra Spare Part</span>
-              </button>
-            </div>
+            {/* Sub-tabs: Labor vs Part (Only toggleable when adding new items) */}
+            {!editingService && !editingPart ? (
+              <div className="flex border-b border-gray-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setExtraWorkTab('service')}
+                  className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-2 border-b-2 transition-all ${
+                    extraWorkTab === 'service'
+                      ? 'border-primary-500 text-primary-600 dark:text-primary-400 bg-white dark:bg-[#0e1424]'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <Wrench className="h-4 w-4" />
+                  <span>Extra Labor / Service</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExtraWorkTab('part')}
+                  className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-2 border-b-2 transition-all ${
+                    extraWorkTab === 'part'
+                      ? 'border-primary-500 text-primary-600 dark:text-primary-400 bg-white dark:bg-[#0e1424]'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <Package className="h-4 w-4" />
+                  <span>Extra Spare Part</span>
+                </button>
+              </div>
+            ) : (
+              <div className="px-5 py-2.5 bg-slate-50 dark:bg-slate-900/40 border-b border-gray-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 shrink-0">
+                {editingService ? (
+                  <>
+                    <Wrench className="h-4 w-4 text-primary-500" />
+                    <span>Modifying details and technician assignments for <strong>{editingService.service_name}</strong></span>
+                  </>
+                ) : (
+                  <>
+                    <Package className="h-4 w-4 text-primary-500" />
+                    <span>Modifying details for <strong>{editingPart?.part_name}</strong></span>
+                  </>
+                )}
+              </div>
+            )}
 
-            <div className="p-5">
+            <div className="p-5 overflow-y-auto flex-1">
               {extraWorkTab === 'service' ? (
                 <form onSubmit={handleAddExtraService} className="space-y-4">
-                  {/* Catalog quick-picker */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                      Quick Select from Services Catalog (Optional)
-                    </label>
-                    <select
-                      value={extraServiceId}
-                      onChange={handleSelectCatalogService}
-                      className="input w-full text-xs"
-                    >
-                      <option value="">-- Choose existing service or enter manually --</option>
-                      {(servicesCatalog?.services || servicesCatalog || []).map((s: any) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} ({formatCurrency(s.rate || s.price)})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {/* Catalog quick-picker (Only shown when adding new) */}
+                  {!editingService && (
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                        Quick Select from Services Catalog (Optional)
+                      </label>
+                      <select
+                        value={extraServiceId}
+                        onChange={handleSelectCatalogService}
+                        className="input w-full text-xs"
+                      >
+                        <option value="">-- Choose existing service or enter manually --</option>
+                        {(servicesCatalog?.services || servicesCatalog || []).map((s: any) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} ({formatCurrency(s.rate || s.price)})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -1227,61 +1414,110 @@ const JobCardDetails: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Multi-Technician Assignment Section */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Performing Technician (Optional)
-                    </label>
-                    <select
-                      value={extraServiceTechId}
-                      onChange={(e) => setExtraServiceTechId(e.target.value)}
-                      className="input w-full text-xs"
-                    >
-                      <option value="">-- Assign a technician --</option>
-                      {((technicians?.technicians || (Array.isArray(technicians) ? technicians : []))).map((t: any) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name} {t.role === 'MANAGER' ? '(Manager)' : ''}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Assign Technicians ({extraServiceTechIds.length} Selected)
+                      </label>
+                      <span className="text-[11px] text-slate-400">
+                        Multiple technicians supported
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40 text-[11px] text-blue-800 dark:text-blue-300 mb-2 flex items-start gap-1.5">
+                      <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-blue-500" />
+                      <span>
+                        Assigned staff will be automatically added to this Job Card's Workshop Technicians team.
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 border border-gray-200 dark:border-slate-800 rounded-lg p-2 bg-slate-50/50 dark:bg-slate-900/40">
+                      {((technicians?.technicians || (Array.isArray(technicians) ? technicians : []))).length === 0 ? (
+                        <p className="text-xs text-slate-400 italic text-center py-2">
+                          No technicians or staff available
+                        </p>
+                      ) : (
+                        ((technicians?.technicians || (Array.isArray(technicians) ? technicians : []))).map((t: any) => {
+                          const isChecked = extraServiceTechIds.includes(t.id);
+                          return (
+                            <label
+                              key={t.id}
+                              className={`flex items-center justify-between p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                                isChecked
+                                  ? 'bg-primary-50 dark:bg-primary-950/50 border-primary-300 dark:border-primary-800 text-primary-900 dark:text-primary-200'
+                                  : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => toggleExtraServiceTech(t.id)}
+                                  className="rounded text-primary-600 focus:ring-primary-500 h-4 w-4"
+                                />
+                                <div className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold">
+                                  {t.name.charAt(0)}
+                                </div>
+                                <span className="font-semibold">{t.name}</span>
+                                {t.role === 'MANAGER' && (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded font-bold uppercase bg-purple-100 text-purple-700 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                    Manager
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-slate-400">{t.phone || ''}</span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
 
                   <div className="pt-2 flex justify-end gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowExtraWorkModal(false)}
+                      onClick={() => {
+                        setShowExtraWorkModal(false);
+                        resetServiceForm();
+                      }}
                       className="btn btn-secondary text-xs"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      disabled={addServiceMutation.isLoading}
+                      disabled={addServiceMutation.isLoading || updateServiceMutation.isLoading}
                       className="btn btn-primary text-xs"
                     >
-                      {addServiceMutation.isLoading ? 'Adding...' : 'Add Extra Service'}
+                      {editingService
+                        ? (updateServiceMutation.isLoading ? 'Saving...' : 'Save Service Changes')
+                        : (addServiceMutation.isLoading ? 'Adding...' : 'Add Extra Service')}
                     </button>
                   </div>
                 </form>
               ) : (
                 <form onSubmit={handleAddExtraPart} className="space-y-4">
-                  {/* Catalog quick-picker */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                      Quick Select from Spare Parts Inventory (Optional)
-                    </label>
-                    <select
-                      value={extraPartId}
-                      onChange={handleSelectCatalogPart}
-                      className="input w-full text-xs"
-                    >
-                      <option value="">-- Choose existing stock part or enter manually --</option>
-                      {(sparePartsCatalog?.spareParts || sparePartsCatalog || []).map((p: any) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} {p.part_number ? `(${p.part_number})` : ''} - {formatCurrency(p.price)} [Stock: {p.stock_quantity}]
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {/* Catalog quick-picker (Only shown when adding new) */}
+                  {!editingPart && (
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                        Quick Select from Spare Parts Inventory (Optional)
+                      </label>
+                      <select
+                        value={extraPartId}
+                        onChange={handleSelectCatalogPart}
+                        className="input w-full text-xs"
+                      >
+                        <option value="">-- Choose existing stock part or enter manually --</option>
+                        {(sparePartsCatalog?.spareParts || sparePartsCatalog || []).map((p: any) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} {p.part_number ? `(${p.part_number})` : ''} - {formatCurrency(p.price)} [Stock: {p.stock_quantity}]
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -1370,17 +1606,22 @@ const JobCardDetails: React.FC = () => {
                   <div className="pt-2 flex justify-end gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowExtraWorkModal(false)}
+                      onClick={() => {
+                        setShowExtraWorkModal(false);
+                        resetPartForm();
+                      }}
                       className="btn btn-secondary text-xs"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      disabled={addPartMutation.isLoading}
+                      disabled={addPartMutation.isLoading || updatePartMutation.isLoading}
                       className="btn btn-primary text-xs"
                     >
-                      {addPartMutation.isLoading ? 'Adding...' : 'Add Extra Spare Part'}
+                      {editingPart
+                        ? (updatePartMutation.isLoading ? 'Saving...' : 'Save Part Changes')
+                        : (addPartMutation.isLoading ? 'Adding...' : 'Add Extra Spare Part')}
                     </button>
                   </div>
                 </form>
@@ -1692,7 +1933,18 @@ const JobCardDetails: React.FC = () => {
               {services.map((s: any) => (
                 <tr key={s.id} className="border-b border-gray-200">
                   <td className="py-1.5">{s.is_extra_work ? 'EXTRA WORK' : 'PLANNED'}</td>
-                  <td className="py-1.5 font-bold">{s.service_name}</td>
+                  <td className="py-1.5 font-bold">
+                    {s.service_name}
+                    {s.assigned_technicians && s.assigned_technicians.length > 0 ? (
+                      <span className="block text-[10px] font-normal text-gray-700">
+                        Technicians: {s.assigned_technicians.map((t: any) => t.name).join(', ')}
+                      </span>
+                    ) : s.technician_name ? (
+                      <span className="block text-[10px] font-normal text-gray-700">
+                        Technician: {s.technician_name}
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="py-1.5 text-center">[  ]</td>
                   <td className="py-1.5 text-right">________________</td>
                 </tr>

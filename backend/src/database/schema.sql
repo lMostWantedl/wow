@@ -147,6 +147,7 @@ CREATE TABLE IF NOT EXISTS bills (
     bill_number VARCHAR(50) UNIQUE NOT NULL,
     customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
     technician_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    technician_ids JSONB DEFAULT '[]'::jsonb,
     vehicle_id UUID REFERENCES customer_vehicles(id) ON DELETE SET NULL,
     service_date DATE NOT NULL,
     status VARCHAR(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')),
@@ -296,6 +297,7 @@ CREATE TABLE IF NOT EXISTS job_card_services (
     total_price DECIMAL(10,2) NOT NULL DEFAULT 0,
     is_extra_work BOOLEAN DEFAULT false,
     technician_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    technician_ids JSONB DEFAULT '[]'::jsonb,
     status VARCHAR(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -168,6 +168,7 @@ const initializeDatabase = async () => {
       CREATE INDEX IF NOT EXISTS idx_job_card_technicians_tech_id ON job_card_technicians(technician_id);
       CREATE INDEX IF NOT EXISTS idx_job_card_services_jc_id ON job_card_services(job_card_id);
       CREATE INDEX IF NOT EXISTS idx_job_card_spare_parts_jc_id ON job_card_spare_parts(job_card_id);
+      ALTER TABLE job_card_services ADD COLUMN IF NOT EXISTS technician_ids JSONB DEFAULT '[]'::jsonb;
     `);
 
     console.log('Database schema created and synchronized successfully');

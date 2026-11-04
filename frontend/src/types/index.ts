@@ -488,6 +488,12 @@ export interface JobCardService {
   is_extra_work: boolean;
   technician_id?: string;
   technician_name?: string;
+  technician_ids?: string[];
+  assigned_technicians?: Array<{
+    id: string;
+    name: string;
+    role?: string;
+  }>;
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
   created_at?: string;
 }

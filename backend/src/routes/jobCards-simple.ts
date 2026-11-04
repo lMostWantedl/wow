@@ -141,7 +141,21 @@ router.get('/:id', async (req: AuthRequest, res) => {
 
     // Services
     const servicesResult = await query(`
-      SELECT jcs.*, u.name as technician_name
+      SELECT jcs.*, u.name as technician_name,
+        COALESCE((
+          SELECT json_agg(json_build_object('id', ut.id, 'name', ut.name, 'role', ut.role))
+          FROM users ut
+          WHERE ut.id::text IN (
+            SELECT jsonb_array_elements_text(
+              CASE 
+                WHEN jcs.technician_ids IS NOT NULL AND jsonb_typeof(jcs.technician_ids) = 'array' AND jsonb_array_length(jcs.technician_ids) > 0
+                  THEN jcs.technician_ids
+                WHEN jcs.technician_id IS NOT NULL THEN jsonb_build_array(jcs.technician_id::text)
+                ELSE '[]'::jsonb
+              END
+            )
+          )
+        ), '[]'::json) as assigned_technicians
       FROM job_card_services jcs
       LEFT JOIN users u ON jcs.technician_id = u.id
       WHERE jcs.job_card_id = $1
@@ -257,10 +271,19 @@ router.post('/', async (req: AuthRequest, res) => {
       for (const s of services) {
         const qty = Number(s.hoursQty || s.quantity || 1);
         const price = Number(s.unitPrice || 0);
+
+        let sTechIds: string[] = [];
+        if (Array.isArray(s.technicianIds)) {
+          sTechIds = s.technicianIds.filter(Boolean);
+        } else if (s.technicianId) {
+          sTechIds = [s.technicianId];
+        }
+        const sPrimaryTechId = sTechIds.length > 0 ? sTechIds[0] : null;
+
         await query(`
           INSERT INTO job_card_services (
-            job_card_id, service_id, service_name, description, hours_qty, unit_price, total_price, is_extra_work
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, false)
+            job_card_id, service_id, service_name, description, hours_qty, unit_price, total_price, is_extra_work, technician_id, technician_ids
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8, $9)
         `, [
           createdJobCard.id,
           s.serviceId || null,
@@ -268,8 +291,19 @@ router.post('/', async (req: AuthRequest, res) => {
           s.description || '',
           qty,
           price,
-          qty * price
+          qty * price,
+          sPrimaryTechId,
+          JSON.stringify(sTechIds)
         ]);
+
+        // Auto-add assigned service technician(s) to workshop technicians list
+        for (const tid of sTechIds) {
+          await query(`
+            INSERT INTO job_card_technicians (job_card_id, technician_id, role)
+            VALUES ($1, $2, 'TECHNICIAN')
+            ON CONFLICT (job_card_id, technician_id) DO NOTHING
+          `, [createdJobCard.id, tid]);
+        }
       }
     }
 
@@ -398,12 +432,21 @@ router.post('/:id/services', async (req: AuthRequest, res) => {
       hoursQty = 1,
       unitPrice = 0,
       isExtraWork = true,
-      technicianId
+      technicianId,
+      technicianIds
     } = req.body;
 
     const qty = Number(hoursQty) || 1;
     const price = Number(unitPrice) || 0;
     const total = qty * price;
+
+    let effectiveTechIds: string[] = [];
+    if (Array.isArray(technicianIds) && technicianIds.length > 0) {
+      effectiveTechIds = technicianIds.filter(Boolean);
+    } else if (technicianId) {
+      effectiveTechIds = [technicianId];
+    }
+    const primaryTechId = effectiveTechIds.length > 0 ? effectiveTechIds[0] : null;
 
     let finalServiceName = serviceName;
     if (!finalServiceName && serviceId) {
@@ -413,8 +456,8 @@ router.post('/:id/services', async (req: AuthRequest, res) => {
 
     const result = await query(`
       INSERT INTO job_card_services (
-        job_card_id, service_id, service_name, description, hours_qty, unit_price, total_price, is_extra_work, technician_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        job_card_id, service_id, service_name, description, hours_qty, unit_price, total_price, is_extra_work, technician_id, technician_ids
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `, [
       id,
@@ -425,8 +468,20 @@ router.post('/:id/services', async (req: AuthRequest, res) => {
       price,
       total,
       Boolean(isExtraWork),
-      technicianId || null
+      primaryTechId,
+      JSON.stringify(effectiveTechIds)
     ]);
+
+    // Auto-add assigned technicians to workshop team if not already present
+    if (effectiveTechIds.length > 0) {
+      for (const tId of effectiveTechIds) {
+        await query(`
+          INSERT INTO job_card_technicians (job_card_id, technician_id, role)
+          VALUES ($1, $2, 'TECHNICIAN')
+          ON CONFLICT (job_card_id, technician_id) DO NOTHING
+        `, [id, tId]);
+      }
+    }
 
     const updatedActual = await recalculateJobCardTotals(id);
 
@@ -437,6 +492,93 @@ router.post('/:id/services', async (req: AuthRequest, res) => {
     });
   } catch (error: any) {
     console.error('Add service to job card error:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+// PUT /api/job-cards/:id/services/:serviceId - Update service / labor in job card
+router.put('/:id/services/:serviceId', async (req: AuthRequest, res) => {
+  try {
+    const { id, serviceId } = req.params;
+    const {
+      serviceName,
+      description = '',
+      hoursQty,
+      unitPrice,
+      technicianId,
+      technicianIds
+    } = req.body;
+
+    const existingResult = await query(
+      'SELECT * FROM job_card_services WHERE id = $1 AND job_card_id = $2',
+      [serviceId, id]
+    );
+    if (existingResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Service not found on this Job Card' });
+    }
+
+    const current = existingResult.rows[0];
+    const qty = hoursQty !== undefined ? (Number(hoursQty) || 1) : Number(current.hours_qty);
+    const price = unitPrice !== undefined ? (Number(unitPrice) || 0) : Number(current.unit_price);
+    const total = qty * price;
+
+    let effectiveTechIds: string[] = [];
+    if (Array.isArray(technicianIds)) {
+      effectiveTechIds = technicianIds.filter(Boolean);
+    } else if (technicianId !== undefined) {
+      effectiveTechIds = technicianId ? [technicianId] : [];
+    } else if (current.technician_ids && Array.isArray(current.technician_ids)) {
+      effectiveTechIds = current.technician_ids;
+    } else if (current.technician_id) {
+      effectiveTechIds = [current.technician_id];
+    }
+
+    const primaryTechId = effectiveTechIds.length > 0 ? effectiveTechIds[0] : null;
+
+    const result = await query(`
+      UPDATE job_card_services SET
+        service_name = COALESCE($1, service_name),
+        description = COALESCE($2, description),
+        hours_qty = $3,
+        unit_price = $4,
+        total_price = $5,
+        technician_id = $6,
+        technician_ids = $7,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $8 AND job_card_id = $9
+      RETURNING *
+    `, [
+      serviceName !== undefined ? serviceName : null,
+      description !== undefined ? description : null,
+      qty,
+      price,
+      total,
+      primaryTechId,
+      JSON.stringify(effectiveTechIds),
+      serviceId,
+      id
+    ]);
+
+    // Auto-add assigned technicians to workshop team if not already present
+    if (effectiveTechIds.length > 0) {
+      for (const tId of effectiveTechIds) {
+        await query(`
+          INSERT INTO job_card_technicians (job_card_id, technician_id, role)
+          VALUES ($1, $2, 'TECHNICIAN')
+          ON CONFLICT (job_card_id, technician_id) DO NOTHING
+        `, [id, tId]);
+      }
+    }
+
+    const updatedActual = await recalculateJobCardTotals(id);
+
+    res.json({
+      message: 'Service updated successfully',
+      service: result.rows[0],
+      totalAmount: updatedActual
+    });
+  } catch (error: any) {
+    console.error('Update service error:', error);
     res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });
@@ -513,6 +655,69 @@ router.post('/:id/spare-parts', async (req: AuthRequest, res) => {
     });
   } catch (error: any) {
     console.error('Add spare part to job card error:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+// PUT /api/job-cards/:id/spare-parts/:partId - Update spare part in job card
+router.put('/:id/spare-parts/:partId', async (req: AuthRequest, res) => {
+  try {
+    const { id, partId } = req.params;
+    const {
+      partName,
+      partNumber,
+      description = '',
+      quantity,
+      unit,
+      unitPrice
+    } = req.body;
+
+    const existingResult = await query(
+      'SELECT * FROM job_card_spare_parts WHERE id = $1 AND job_card_id = $2',
+      [partId, id]
+    );
+    if (existingResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Spare part not found on this Job Card' });
+    }
+
+    const current = existingResult.rows[0];
+    const qty = quantity !== undefined ? (Number(quantity) || 1) : Number(current.quantity);
+    const price = unitPrice !== undefined ? (Number(unitPrice) || 0) : Number(current.unit_price);
+    const total = qty * price;
+
+    const result = await query(`
+      UPDATE job_card_spare_parts SET
+        part_name = COALESCE($1, part_name),
+        part_number = COALESCE($2, part_number),
+        description = COALESCE($3, description),
+        quantity = $4,
+        unit = COALESCE($5, unit),
+        unit_price = $6,
+        total_price = $7,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $8 AND job_card_id = $9
+      RETURNING *
+    `, [
+      partName !== undefined ? partName : null,
+      partNumber !== undefined ? partNumber : null,
+      description !== undefined ? description : null,
+      qty,
+      unit !== undefined ? unit : null,
+      price,
+      total,
+      partId,
+      id
+    ]);
+
+    const updatedActual = await recalculateJobCardTotals(id);
+
+    res.json({
+      message: 'Spare part updated successfully',
+      sparePart: result.rows[0],
+      totalAmount: updatedActual
+    });
+  } catch (error: any) {
+    console.error('Update spare part error:', error);
     res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });

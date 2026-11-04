@@ -42,8 +42,21 @@ export const jobCardsService = {
     unitPrice?: number;
     isExtraWork?: boolean;
     technicianId?: string;
+    technicianIds?: string[];
   }): Promise<any> => {
     const response = await api.post(`/job-cards/${id}/services`, data);
+    return response.data;
+  },
+
+  updateService: async (id: string, serviceId: string, data: {
+    serviceName?: string;
+    description?: string;
+    hoursQty?: number;
+    unitPrice?: number;
+    technicianId?: string;
+    technicianIds?: string[];
+  }): Promise<any> => {
+    const response = await api.put(`/job-cards/${id}/services/${serviceId}`, data);
     return response.data;
   },
 
@@ -63,6 +76,18 @@ export const jobCardsService = {
     isExtraWork?: boolean;
   }): Promise<any> => {
     const response = await api.post(`/job-cards/${id}/spare-parts`, data);
+    return response.data;
+  },
+
+  updateSparePart: async (id: string, partId: string, data: {
+    partName?: string;
+    partNumber?: string;
+    description?: string;
+    quantity?: number;
+    unit?: string;
+    unitPrice?: number;
+  }): Promise<any> => {
+    const response = await api.put(`/job-cards/${id}/spare-parts/${partId}`, data);
     return response.data;
   },
 
