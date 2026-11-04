@@ -552,6 +552,8 @@ export interface JobCardSparePart {
   total_price: number;
   is_extra_work: boolean;
   stock_quantity?: number;
+  garage_cost?: number;
+  default_supplier?: string;
   status: 'REQUESTED' | 'ISSUED' | 'INSTALLED';
   is_procured?: boolean;
   procured_cost?: number;

@@ -180,7 +180,7 @@ router.get('/:id', async (req: AuthRequest, res) => {
 
     // Spare parts
     const partsResult = await query(`
-      SELECT jcsp.*, sp.stock_quantity
+      SELECT jcsp.*, sp.stock_quantity, sp.cost as garage_cost, sp.supplier as default_supplier
       FROM job_card_spare_parts jcsp
       LEFT JOIN spare_parts sp ON jcsp.spare_part_id = sp.id
       WHERE jcsp.job_card_id = $1

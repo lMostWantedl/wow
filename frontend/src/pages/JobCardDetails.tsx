@@ -510,13 +510,21 @@ const JobCardDetails: React.FC = () => {
   );
 
   const openProcureModal = (type: 'PART' | 'SERVICE', item: any) => {
-    const defaultCost = type === 'PART'
-      ? (Number(item.quantity || 1) * Number(item.unit_price || 0))
-      : (Number(item.cost_price || 0) > 0 ? Number(item.cost_price) : Number(item.total_price || item.unit_price || 0));
+    let defaultCost = 0;
+    if (type === 'PART') {
+      const unitCost = Number(item.garage_cost) > 0
+        ? Number(item.garage_cost)
+        : (Number(item.cost) > 0 ? Number(item.cost) : Number(item.unit_price || 0));
+      defaultCost = Number(item.quantity || 1) * unitCost;
+    } else {
+      defaultCost = Number(item.cost_price || 0) > 0
+        ? Number(item.cost_price)
+        : Number(item.total_price || item.unit_price || 0);
+    }
 
     setProcurementModal({ isOpen: true, type, item });
     setProcureCost(String(defaultCost));
-    setProcureVendor(type === 'PART' ? '' : (item.vendor_name || ''));
+    setProcureVendor(type === 'PART' ? (item.default_supplier || '') : (item.vendor_name || ''));
     setProcurePaymentMethod('CASH');
     setProcureInvoiceRef('');
     setProcureNotes('');
@@ -3347,35 +3355,63 @@ const JobCardDetails: React.FC = () => {
 
             <form onSubmit={handleProcureSubmit} className="p-5 space-y-4">
               {/* Item Summary Card */}
-              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-gray-200 dark:border-slate-800 text-xs space-y-1">
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-gray-200 dark:border-slate-800 text-xs space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="font-bold text-gray-900 dark:text-slate-100 text-sm">
                     {procurementModal.item?.part_name || procurementModal.item?.service_name}
                   </span>
-                  <span className="text-primary-600 dark:text-primary-400 font-semibold">
-                    Customer Billed: {formatCurrency(procurementModal.item?.total_price)}
-                  </span>
+                  {procurementModal.item?.part_number && (
+                    <span className="text-[10px] font-mono text-slate-400">
+                      PN: {procurementModal.item?.part_number}
+                    </span>
+                  )}
                 </div>
-                {procurementModal.type === 'PART' ? (
-                  <p className="text-slate-500">
-                    Quantity: {formatQuantity(procurementModal.item?.quantity)} {procurementModal.item?.unit || 'pieces'}
-                    {procurementModal.item?.part_number && ` · PN: ${procurementModal.item?.part_number}`}
-                  </p>
-                ) : (
-                  <p className="text-slate-500">
-                    Vendor/Lab: {procurementModal.item?.vendor_name || 'Specialist Lab'} · Jobs: {formatQuantity(procurementModal.item?.hours_qty)}
-                  </p>
-                )}
+
+                {/* Price Breakdown Comparison: Retail (Customer) vs Garage Cost */}
+                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-gray-200 dark:border-slate-800">
+                  <div className="p-2 rounded-lg bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/40">
+                    <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 block">
+                      Customer Retail Price (Billed)
+                    </span>
+                    <span className="font-bold text-blue-900 dark:text-blue-200 text-xs font-mono">
+                      {formatCurrency(procurementModal.item?.total_price)}
+                    </span>
+                    <span className="text-[9px] text-slate-400 block mt-0.5">
+                      {procurementModal.type === 'PART'
+                        ? `${formatQuantity(procurementModal.item?.quantity)} ${procurementModal.item?.unit || 'pcs'} @ ${formatCurrency(procurementModal.item?.unit_price)}`
+                        : `${formatQuantity(procurementModal.item?.hours_qty)} jobs`}
+                    </span>
+                  </div>
+
+                  <div className="p-2 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40">
+                    <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 block">
+                      Garage Cost (Catalog / Baseline)
+                    </span>
+                    <span className="font-bold text-emerald-900 dark:text-emerald-200 text-xs font-mono">
+                      {procurementModal.type === 'PART'
+                        ? (Number(procurementModal.item?.garage_cost) > 0
+                            ? formatCurrency(Number(procurementModal.item?.garage_cost) * Number(procurementModal.item?.quantity || 1))
+                            : formatCurrency(procurementModal.item?.total_price))
+                        : (Number(procurementModal.item?.cost_price) > 0
+                            ? formatCurrency(procurementModal.item?.cost_price)
+                            : formatCurrency(procurementModal.item?.total_price))}
+                    </span>
+                    <span className="text-[9px] text-emerald-600/70 dark:text-emerald-400/70 block mt-0.5">
+                      Wholesale / Lab purchase cost
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-xl p-3 text-xs text-emerald-800 dark:text-emerald-300">
-                💡 Marking this item as procured will automatically log an operating outflow in your <strong>Financial Management Expense Ledger</strong> and deduct this cost from your <strong>Total All-Time Remaining Cash In-Hand / Bank Balance</strong>.
+                💡 Only the <strong>Garage Procurement Cost</strong> entered below will be recorded as an OpEx expense in your <strong>Financial Management Ledger</strong> and deducted from your <strong>Total Remaining Cash In-Hand / Bank Balance</strong>. (Customer Retail Price will be collected separately when the bill is paid).
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Procurement Outflow Cost (₹) *
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                    <span>Garage Procurement Cost (₹) *</span>
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Cash Outflow</span>
                   </label>
                   <input
                     type="number"
@@ -3387,7 +3423,7 @@ const JobCardDetails: React.FC = () => {
                     placeholder="0.00"
                     className="input w-full text-xs font-mono font-bold"
                   />
-                  <span className="text-[10px] text-slate-400">Actual amount paid by the garage</span>
+                  <span className="text-[10px] text-slate-400">Actual amount paid by garage to supplier / lab</span>
                 </div>
 
                 <div>
