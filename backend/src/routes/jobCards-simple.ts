@@ -50,6 +50,8 @@ router.get('/', async (req: AuthRequest, res) => {
              cv.license_plate as vehicle_number,
              cv.vin as vehicle_vin,
              cv.year as vehicle_year,
+             vm.name as vehicle_make,
+             vmo.name as vehicle_model_name,
              TRIM(CONCAT(vm.name, ' ', vmo.name)) as vehicle_model,
              b.bill_number,
              (
@@ -124,6 +126,8 @@ router.get('/:id', async (req: AuthRequest, res) => {
              cv.license_plate as vehicle_number,
              cv.vin as vehicle_vin,
              cv.year as vehicle_year,
+             vm.name as vehicle_make,
+             vmo.name as vehicle_model_name,
              TRIM(CONCAT(vm.name, ' ', vmo.name)) as vehicle_model,
              b.bill_number, b.payment_status as bill_payment_status, b.total_amount as bill_total_amount
       FROM job_cards jc

@@ -2,7 +2,7 @@ import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from 'react-query';
 import { sparePartsService } from '../services/spareParts';
-import { ArrowLeft, Edit, Package, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Edit, Package, AlertTriangle, Car, Info } from 'lucide-react';
 
 const SparePartDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -41,9 +41,10 @@ const SparePartDetails: React.FC = () => {
   }
 
   const isLowStock = (sparePart.stock || 0) <= (sparePart.minStock || 0);
+  const isUniv = (sparePart.make || '').toLowerCase() === 'universal';
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-12 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <button
@@ -54,14 +55,21 @@ const SparePartDetails: React.FC = () => {
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">{sparePart.name}</h1>
-            <p className="text-sm text-gray-500 dark:text-slate-400 mt-0.5">Part details, stock inventory, and margin analysis</p>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">{sparePart.name}</h1>
+              {sparePart.partType && (
+                <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800/60">
+                  {sparePart.partType}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Part details, vehicle fitment, stock inventory, and margin analysis</p>
           </div>
         </div>
 
         <button
           onClick={() => navigate(`/spare-parts/${id}/edit`)}
-          className="btn btn-primary flex items-center gap-2 self-start sm:self-auto shadow-sm"
+          className="btn btn-primary flex items-center gap-2 self-start sm:self-auto shadow-sm text-xs font-semibold px-4 py-2"
         >
           <Edit className="h-4 w-4" />
           Edit Spare Part
@@ -69,11 +77,76 @@ const SparePartDetails: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Basic Information */}
+        {/* Main Content (2 Cols) */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Vehicle Compatibility & Fitment Card */}
+          <div className="card p-6 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+            <div className="flex items-center gap-2.5 mb-4 pb-2 border-b border-gray-100 dark:border-slate-800">
+              <div className="p-2 bg-primary-50 dark:bg-primary-950/40 text-primary-600 dark:text-primary-400 rounded-lg">
+                <Car className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-slate-100">Vehicle Compatibility & Fitment</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Target car make, model, generation, and engine specifications</p>
+              </div>
+            </div>
+
+            {isUniv ? (
+              <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-3">
+                <Info className="h-5 w-5 text-primary-500 shrink-0" />
+                <p>
+                  This part is <strong>Universal / Consumable</strong>. It can be applied across all makes and models.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <label className="font-semibold text-gray-500 dark:text-slate-400 block mb-1">Make / Brand</label>
+                  <p className="font-bold text-sm text-gray-900 dark:text-slate-100">{sparePart.make || 'Universal'}</p>
+                </div>
+                <div>
+                  <label className="font-semibold text-gray-500 dark:text-slate-400 block mb-1">Car Model</label>
+                  <p className="font-bold text-sm text-gray-900 dark:text-slate-100">{sparePart.model || 'All Models'}</p>
+                </div>
+                <div>
+                  <label className="font-semibold text-gray-500 dark:text-slate-400 block mb-1">Generation / Era</label>
+                  <span className="inline-flex px-2 py-0.5 rounded font-medium bg-primary-50 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800/50">
+                    {sparePart.generation || 'All Generations'}
+                  </span>
+                </div>
+                <div>
+                  <label className="font-semibold text-gray-500 dark:text-slate-400 block mb-1">Year Range</label>
+                  <p className="font-medium text-gray-800 dark:text-slate-200">
+                    {sparePart.yearStart || sparePart.yearEnd
+                      ? `${sparePart.yearStart || 'Any'} - ${sparePart.yearEnd || 'Present'}`
+                      : 'All Production Years'}
+                  </p>
+                </div>
+                <div>
+                  <label className="font-semibold text-gray-500 dark:text-slate-400 block mb-1">Fuel Type</label>
+                  <p className="font-medium text-gray-800 dark:text-slate-200">{sparePart.fuelType || 'All Fuels'}</p>
+                </div>
+                <div>
+                  <label className="font-semibold text-gray-500 dark:text-slate-400 block mb-1">Engine / Variant</label>
+                  <p className="font-medium text-gray-800 dark:text-slate-200">{sparePart.variant || 'All Variants'}</p>
+                </div>
+
+                {sparePart.compatibilityNotes && (
+                  <div className="sm:col-span-2 md:col-span-3 pt-2">
+                    <label className="font-semibold text-gray-500 dark:text-slate-400 block mb-1">Fitment Notes</label>
+                    <p className="text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/60 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                      {sparePart.compatibilityNotes}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Basic Part Information */}
           <div className="card p-6 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
             <h3 className="text-base font-bold text-gray-900 dark:text-slate-100 mb-4 pb-2 border-b border-gray-100 dark:border-slate-800">
-              Basic Part Information
+              Component & Manufacturer Details
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
@@ -81,8 +154,16 @@ const SparePartDetails: React.FC = () => {
                 <p className="font-bold text-sm text-gray-900 dark:text-slate-100">{sparePart.name}</p>
               </div>
               <div>
-                <label className="font-semibold text-gray-500 dark:text-slate-400 block mb-1">Part Number</label>
+                <label className="font-semibold text-gray-500 dark:text-slate-400 block mb-1">OEM Manufacturer Part #</label>
+                <p className="font-mono text-sm font-semibold text-primary-600 dark:text-primary-400">{sparePart.oemPartNumber || '—'}</p>
+              </div>
+              <div>
+                <label className="font-semibold text-gray-500 dark:text-slate-400 block mb-1">Garage SKU / Part #</label>
                 <p className="font-mono text-sm font-semibold text-gray-900 dark:text-slate-100">{sparePart.partNumber || '—'}</p>
+              </div>
+              <div>
+                <label className="font-semibold text-gray-500 dark:text-slate-400 block mb-1">Part Brand</label>
+                <p className="font-medium text-gray-800 dark:text-slate-200">{sparePart.brand || '—'}</p>
               </div>
               <div>
                 <label className="font-semibold text-gray-500 dark:text-slate-400 block mb-1">Category</label>
@@ -131,7 +212,7 @@ const SparePartDetails: React.FC = () => {
           </div>
         </div>
 
-        {/* Stock Information */}
+        {/* Sidebar (Stock Info & Quick Actions) */}
         <div className="space-y-6">
           <div className="card p-6 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
             <h3 className="text-base font-bold text-gray-900 dark:text-slate-100 mb-4 pb-2 border-b border-gray-100 dark:border-slate-800">

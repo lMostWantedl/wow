@@ -45,13 +45,26 @@ CREATE TABLE IF NOT EXISTS services (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Spare parts table
+-- Spare parts table (with Car-Specific Brand, Model, Generation, and Compatibility)
 CREATE TABLE IF NOT EXISTS spare_parts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
     part_number VARCHAR(100),
     description TEXT,
     category VARCHAR(100),
+    make VARCHAR(100) DEFAULT 'Universal',
+    model VARCHAR(100) DEFAULT 'All Models',
+    generation VARCHAR(100) DEFAULT 'All Generations',
+    year_start INTEGER,
+    year_end INTEGER,
+    variant VARCHAR(100) DEFAULT 'All Variants',
+    fuel_type VARCHAR(50) DEFAULT 'All',
+    part_type VARCHAR(50) DEFAULT 'OEM Genuine',
+    brand VARCHAR(100) DEFAULT 'OEM',
+    oem_part_number VARCHAR(100),
+    compatibility_notes TEXT,
+    make_id UUID,
+    model_id UUID,
     price DECIMAL(10,2) NOT NULL,
     cost DECIMAL(10,2) NOT NULL,
     stock_quantity DECIMAL(10,3) DEFAULT 0,

@@ -115,6 +115,11 @@ function App() {
               <CreateSparePart />
             </RoleBasedRoute>
           } />
+          <Route path="spare-parts/new" element={
+            <RoleBasedRoute allowedRoles={['TECHNICIAN', 'MANAGER']} requiredScope="spare_parts">
+              <CreateSparePart />
+            </RoleBasedRoute>
+          } />
           <Route path="spare-parts/:id" element={
             <RoleBasedRoute allowedRoles={['TECHNICIAN', 'MANAGER']} requiredScope="spare_parts">
               <SparePartDetails />

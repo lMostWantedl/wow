@@ -12,13 +12,28 @@ export interface SparePartResponse {
 
 export interface CreateSparePartData {
   name: string;
-  partNumber: string;
+  partNumber?: string;
+  oemPartNumber?: string;
   description?: string;
   category: string;
+  make?: string;
+  model?: string;
+  generation?: string;
+  yearStart?: number;
+  yearEnd?: number;
+  variant?: string;
+  fuelType?: string;
+  partType?: string;
+  brand?: string;
+  compatibilityNotes?: string;
+  makeId?: string;
+  modelId?: string;
   price: number;
   cost: number;
   stock?: number;
   minStock?: number;
+  unit?: string;
+  unitType?: string;
   supplier?: string;
 }
 
@@ -34,9 +49,19 @@ export const sparePartsService = {
     limit?: number;
     category?: string;
     search?: string;
+    make?: string;
+    model?: string;
+    generation?: string;
+    vehicleMake?: string;
+    vehicleModel?: string;
     lowStock?: boolean;
   }): Promise<SparePartsResponse> => {
     const response = await api.get('/spare-parts', { params });
+    return response.data;
+  },
+
+  getVehicleFits: async (): Promise<{ makes: string[]; models: { make: string; model: string; generation: string }[] }> => {
+    const response = await api.get('/spare-parts/vehicle-fits');
     return response.data;
   },
 
@@ -56,7 +81,7 @@ export const sparePartsService = {
   },
 
   getLowStockItems: async (): Promise<{ lowStockItems: SparePart[] }> => {
-    const response = await api.get('/spare-parts/low-stock');
+    const response = await api.get('/spare-parts/alerts/low-stock');
     return response.data;
   },
 
@@ -77,14 +102,6 @@ export const sparePartsService = {
 
   deleteSparePart: async (id: string): Promise<{ message: string }> => {
     const response = await api.delete(`/spare-parts/${id}`);
-    return response.data;
-  },
-
-  getUsageStatistics: async (id: string, params?: {
-    startDate?: string;
-    endDate?: string;
-  }): Promise<any> => {
-    const response = await api.get(`/spare-parts/${id}/usage`, { params });
     return response.data;
   },
 };

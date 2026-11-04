@@ -6,6 +6,7 @@ import { usersService } from '../services/users';
 import { servicesService } from '../services/services';
 import { sparePartsService } from '../services/spareParts';
 import { JobCardStatus, JobCardService, JobCardSparePart } from '../types';
+import { DEFAULT_SPARE_PART_CATEGORIES } from '../constants/sparePartOptions';
 import { format, isValid } from 'date-fns';
 import { useReactToPrint } from 'react-to-print';
 import toast from 'react-hot-toast';
@@ -99,6 +100,23 @@ const JobCardDetails: React.FC = () => {
   const [partSearchQuery, setPartSearchQuery] = useState('');
   const [isPartDropdownOpen, setIsPartDropdownOpen] = useState(false);
 
+  // Quick Create Part states (inside Job Card modal)
+  const [showQuickCreatePart, setShowQuickCreatePart] = useState(false);
+  const [quickPartName, setQuickPartName] = useState('');
+  const [quickPartNumber, setQuickPartNumber] = useState('');
+  const [quickOemPartNumber, setQuickOemPartNumber] = useState('');
+  const [quickPartMake, setQuickPartMake] = useState('');
+  const [quickPartModel, setQuickPartModel] = useState('');
+  const [quickPartGen, setQuickPartGen] = useState('');
+  const [quickPartType, setQuickPartType] = useState('OEM Genuine');
+  const [quickPartBrand, setQuickPartBrand] = useState('');
+  const [quickPartCategory, setQuickPartCategory] = useState('Filters (Oil, Air, Cabin, Fuel)');
+  const [quickPartPrice, setQuickPartPrice] = useState('');
+  const [quickPartCost, setQuickPartCost] = useState('');
+  const [quickPartStock, setQuickPartStock] = useState('1');
+  const [quickPartUnit, setQuickPartUnit] = useState('pieces');
+  const [isCreatingPart, setIsCreatingPart] = useState(false);
+
   // Convert to invoice states
   const [invoiceDiscount, setInvoiceDiscount] = useState('0');
   const [invoiceTaxRate, setInvoiceTaxRate] = useState('18');
@@ -121,10 +139,14 @@ const JobCardDetails: React.FC = () => {
     }
   );
 
+  const jobCard = jobCardData?.jobCard;
+  const vehicleMake = (jobCard?.vehicle_make || '').toLowerCase();
+  const vehicleModel = (jobCard?.vehicle_model_name || jobCard?.vehicle_model || '').toLowerCase();
+
   // Catalogs for adding extra work
   const { data: technicians } = useQuery('technicians', () => usersService.getTechnicians()) as { data: any };
   const { data: servicesCatalog } = useQuery('services', () => servicesService.getServices()) as { data: any };
-  const { data: sparePartsCatalog } = useQuery('spareParts', () => sparePartsService.getSpareParts()) as { data: any };
+  const { data: sparePartsCatalog } = useQuery('spareParts', () => sparePartsService.getSpareParts({ limit: 500 })) as { data: any };
 
   const catalogServicesList = React.useMemo(() => {
     return servicesCatalog?.services || (Array.isArray(servicesCatalog) ? servicesCatalog : []);
@@ -145,17 +167,41 @@ const JobCardDetails: React.FC = () => {
   }, [sparePartsCatalog]);
 
   const filteredCatalogParts = React.useMemo(() => {
-    if (!partSearchQuery.trim()) return catalogPartsList;
-    const q = partSearchQuery.toLowerCase();
-    return catalogPartsList.filter((p: any) =>
-      p.name?.toLowerCase().includes(q) ||
-      p.part_number?.toLowerCase().includes(q) ||
-      p.category?.toLowerCase().includes(q) ||
-      p.description?.toLowerCase().includes(q)
-    );
-  }, [catalogPartsList, partSearchQuery]);
+    let list = catalogPartsList;
+    if (partSearchQuery.trim()) {
+      const q = partSearchQuery.toLowerCase();
+      list = list.filter((p: any) =>
+        p.name?.toLowerCase().includes(q) ||
+        p.part_number?.toLowerCase().includes(q) ||
+        p.partNumber?.toLowerCase().includes(q) ||
+        p.oem_part_number?.toLowerCase().includes(q) ||
+        p.oemPartNumber?.toLowerCase().includes(q) ||
+        p.make?.toLowerCase().includes(q) ||
+        p.model?.toLowerCase().includes(q) ||
+        p.generation?.toLowerCase().includes(q) ||
+        p.brand?.toLowerCase().includes(q) ||
+        p.category?.toLowerCase().includes(q) ||
+        p.description?.toLowerCase().includes(q)
+      );
+    }
 
-  const jobCard = jobCardData?.jobCard;
+    // Sort: Vehicle match first -> Universal next -> Other parts
+    return [...list].sort((a: any, b: any) => {
+      const getPriority = (p: any) => {
+        const pMake = (p.make || '').toLowerCase();
+        const pModel = (p.model || '').toLowerCase();
+        if (vehicleMake && pMake && (vehicleMake.includes(pMake) || pMake.includes(vehicleMake))) {
+          if (vehicleModel && pModel && (vehicleModel.includes(pModel) || pModel.includes(vehicleModel))) {
+            return 3;
+          }
+          return 2;
+        }
+        if (pMake === 'universal') return 1;
+        return 0;
+      };
+      return getPriority(b) - getPriority(a);
+    });
+  }, [catalogPartsList, partSearchQuery, vehicleMake, vehicleModel]);
 
   // Print handlers
   const handlePrintJobCard = useReactToPrint({
@@ -339,6 +385,59 @@ const JobCardDetails: React.FC = () => {
     setExtraPartIsExtra(false);
     setPartSearchQuery('');
     setIsPartDropdownOpen(false);
+    setShowQuickCreatePart(false);
+  };
+
+  const handleQuickCreatePartSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!quickPartName.trim()) {
+      toast.error('Part name is required');
+      return;
+    }
+    const priceNum = parseFloat(quickPartPrice);
+    if (isNaN(priceNum) || priceNum <= 0) {
+      toast.error('Please enter a valid retail price');
+      return;
+    }
+
+    try {
+      setIsCreatingPart(true);
+      const res = await sparePartsService.createSparePart({
+        name: quickPartName.trim(),
+        partNumber: quickPartNumber.trim() || undefined,
+        oemPartNumber: quickOemPartNumber.trim() || undefined,
+        category: quickPartCategory || 'Filters (Oil, Air, Cabin, Fuel)',
+        make: quickPartMake.trim() || (jobCard?.vehicle_make || 'Universal'),
+        model: quickPartModel.trim() || (jobCard?.vehicle_model_name || jobCard?.vehicle_model || 'All Models'),
+        generation: quickPartGen.trim() || undefined,
+        partType: quickPartType,
+        brand: quickPartBrand.trim() || undefined,
+        price: priceNum,
+        cost: parseFloat(quickPartCost) || 0,
+        stock: parseFloat(quickPartStock) || 1,
+        minStock: 2,
+        unit: quickPartUnit,
+        unitType: 'discrete'
+      });
+
+      toast.success(`Part "${quickPartName}" created and added to inventory!`);
+      queryClient.invalidateQueries('spareParts');
+
+      // Auto-select this created part
+      const newPart = res.sparePart;
+      setExtraPartId(newPart.id);
+      setExtraPartName(newPart.name);
+      setExtraPartNumber(newPart.oemPartNumber || newPart.partNumber || '');
+      setExtraPartPrice(String(newPart.price || priceNum));
+      setExtraPartUnit(newPart.unit || quickPartUnit);
+      setExtraPartDesc(newPart.description || '');
+      setPartSearchQuery(newPart.name);
+      setShowQuickCreatePart(false);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to create spare part');
+    } finally {
+      setIsCreatingPart(false);
+    }
   };
 
   const openAddServiceModal = (isExtra: boolean = false) => {
@@ -354,6 +453,8 @@ const JobCardDetails: React.FC = () => {
     resetPartForm();
     setExtraPartIsExtra(isExtra);
     setExtraWorkTab('part');
+    setQuickPartMake(jobCard?.vehicle_make || '');
+    setQuickPartModel(jobCard?.vehicle_model_name || jobCard?.vehicle_model || '');
     setShowExtraWorkModal(true);
   };
 
@@ -1715,105 +1816,354 @@ const JobCardDetails: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Catalog quick-picker (Searchable Combobox) */}
+                  {/* Quick Register New Part or Inventory Select */}
                   {!editingPart && (
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                          Quick Select from Spare Parts Inventory (Optional)
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          {showQuickCreatePart ? 'Register New Part to Inventory' : 'Quick Select from Inventory (Optional)'}
                         </label>
-                        {extraPartId && (
-                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
-                            <CheckCircle2 className="h-3 w-3" /> Inventory Part Linked
-                          </span>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowQuickCreatePart(!showQuickCreatePart);
+                            if (!showQuickCreatePart) {
+                              setQuickPartMake(jobCard?.vehicle_make || '');
+                              setQuickPartModel(jobCard?.vehicle_model_name || jobCard?.vehicle_model || '');
+                              setQuickPartName('');
+                              setQuickPartNumber('');
+                              setQuickOemPartNumber('');
+                              setQuickPartPrice('');
+                              setQuickPartCost('');
+                            }
+                          }}
+                          className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-semibold flex items-center gap-1 hover:underline"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>{showQuickCreatePart ? 'Select Existing Part' : '+ Add New Part to Inventory'}</span>
+                        </button>
                       </div>
-                      <div className="relative">
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-                          <input
-                            type="text"
-                            value={partSearchQuery}
-                            onChange={(e) => {
-                              setPartSearchQuery(e.target.value);
-                              setIsPartDropdownOpen(true);
-                            }}
-                            onFocus={() => setIsPartDropdownOpen(true)}
-                            placeholder="Search inventory by part name, part number, category..."
-                            className="input pl-9 pr-8 w-full text-xs"
-                          />
-                          {(partSearchQuery || extraPartId) && (
+
+                      {/* Quick Add New Part Sub-form */}
+                      {showQuickCreatePart ? (
+                        <div className="p-4 rounded-xl border border-primary-200 dark:border-primary-800/80 bg-primary-50/20 dark:bg-primary-950/20 space-y-3">
+                          <div className="flex items-center justify-between border-b border-primary-100 dark:border-primary-900/40 pb-2">
+                            <div className="flex items-center gap-1.5">
+                              <Package className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+                              <span className="text-xs font-bold text-gray-900 dark:text-slate-100">
+                                New Car-Specific Part Registration
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-primary-600 dark:text-primary-400 font-medium">
+                              Saves to inventory & auto-selects for this job
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="sm:col-span-2">
+                              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                                Part Name *
+                              </label>
+                              <input
+                                type="text"
+                                value={quickPartName}
+                                onChange={(e) => setQuickPartName(e.target.value)}
+                                placeholder="e.g. Front Disc Brake Pads Set"
+                                className="input w-full text-xs font-medium"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                                Car Make / Brand
+                              </label>
+                              <input
+                                type="text"
+                                value={quickPartMake}
+                                onChange={(e) => setQuickPartMake(e.target.value)}
+                                placeholder="e.g. Maruti Suzuki / Universal"
+                                className="input w-full text-xs"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                                Car Model
+                              </label>
+                              <input
+                                type="text"
+                                value={quickPartModel}
+                                onChange={(e) => setQuickPartModel(e.target.value)}
+                                placeholder="e.g. Swift"
+                                className="input w-full text-xs"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                                Generation / Era
+                              </label>
+                              <input
+                                type="text"
+                                value={quickPartGen}
+                                onChange={(e) => setQuickPartGen(e.target.value)}
+                                placeholder="e.g. 3rd Gen (2018-2024)"
+                                className="input w-full text-xs"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                                OEM Part Number
+                              </label>
+                              <input
+                                type="text"
+                                value={quickOemPartNumber}
+                                onChange={(e) => setQuickOemPartNumber(e.target.value)}
+                                placeholder="e.g. 55810M68P00"
+                                className="input w-full text-xs font-mono"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                                Part Type
+                              </label>
+                              <select
+                                value={quickPartType}
+                                onChange={(e) => setQuickPartType(e.target.value)}
+                                className="input w-full text-xs"
+                              >
+                                <option value="OEM Genuine">OEM Genuine</option>
+                                <option value="OES (Original Equipment Supplier)">OES</option>
+                                <option value="Aftermarket Premium">Aftermarket Premium</option>
+                                <option value="Aftermarket Standard">Aftermarket Standard</option>
+                                <option value="Universal / Consumable">Universal / Consumable</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                                Part Brand / Mfr
+                              </label>
+                              <input
+                                type="text"
+                                value={quickPartBrand}
+                                onChange={(e) => setQuickPartBrand(e.target.value)}
+                                placeholder="e.g. Maruti MGP, Bosch, Mobis"
+                                className="input w-full text-xs"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                                Category
+                              </label>
+                              <select
+                                value={quickPartCategory}
+                                onChange={(e) => setQuickPartCategory(e.target.value)}
+                                className="input w-full text-xs"
+                              >
+                                {DEFAULT_SPARE_PART_CATEGORIES.map(cat => (
+                                  <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                                Initial Stock & Unit
+                              </label>
+                              <div className="flex gap-2">
+                                <input
+                                  type="number"
+                                  value={quickPartStock}
+                                  onChange={(e) => setQuickPartStock(e.target.value)}
+                                  min="1"
+                                  className="input w-16 text-xs font-mono"
+                                />
+                                <select
+                                  value={quickPartUnit}
+                                  onChange={(e) => setQuickPartUnit(e.target.value)}
+                                  className="input flex-1 text-xs"
+                                >
+                                  <option value="pieces">Pieces</option>
+                                  <option value="sets">Sets</option>
+                                  <option value="pairs">Pairs</option>
+                                  <option value="liters">Liters</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                                Customer Retail Price (₹) *
+                              </label>
+                              <input
+                                type="number"
+                                value={quickPartPrice}
+                                onChange={(e) => setQuickPartPrice(e.target.value)}
+                                placeholder="0.00"
+                                className="input w-full text-xs font-mono font-bold"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                                Garage Cost (₹)
+                              </label>
+                              <input
+                                type="number"
+                                value={quickPartCost}
+                                onChange={(e) => setQuickPartCost(e.target.value)}
+                                placeholder="0.00"
+                                className="input w-full text-xs font-mono"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex justify-end gap-2 pt-2 border-t border-primary-100 dark:border-primary-900/40">
                             <button
                               type="button"
-                              onClick={() => {
-                                setPartSearchQuery('');
-                                setExtraPartId('');
-                                setIsPartDropdownOpen(false);
-                              }}
-                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
-                              title="Clear selection"
+                              onClick={() => setShowQuickCreatePart(false)}
+                              className="btn btn-secondary text-xs py-1.5 px-3"
                             >
-                              <X className="h-3.5 w-3.5" />
+                              Cancel
                             </button>
+                            <button
+                              type="button"
+                              disabled={isCreatingPart}
+                              onClick={handleQuickCreatePartSubmit}
+                              className="btn btn-primary text-xs py-1.5 px-3.5 flex items-center gap-1.5 font-semibold"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              <span>{isCreatingPart ? 'Saving...' : 'Save & Select for Job Card'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Standard Searchable Combobox */
+                        <div className="relative">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                            <input
+                              type="text"
+                              value={partSearchQuery}
+                              onChange={(e) => {
+                                setPartSearchQuery(e.target.value);
+                                setIsPartDropdownOpen(true);
+                              }}
+                              onFocus={() => setIsPartDropdownOpen(true)}
+                              placeholder={`Search by part name, OEM #, car model (${jobCard?.vehicle_model || 'All'})...`}
+                              className="input pl-9 pr-8 w-full text-xs"
+                            />
+                            {(partSearchQuery || extraPartId) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPartSearchQuery('');
+                                  setExtraPartId('');
+                                  setIsPartDropdownOpen(false);
+                                }}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                                title="Clear selection"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Dropdown Popover */}
+                          {isPartDropdownOpen && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-40"
+                                onClick={() => setIsPartDropdownOpen(false)}
+                              />
+                              <div className="absolute z-50 left-0 right-0 mt-1 max-h-64 overflow-y-auto bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl divide-y divide-gray-100 dark:divide-slate-800">
+                                {filteredCatalogParts.length > 0 ? (
+                                  filteredCatalogParts.map((p: any) => {
+                                    const stockQty = Number(p.stock_quantity ?? p.stock ?? 0);
+                                    const isLow = stockQty <= Number(p.min_stock_level ?? p.minStock ?? 5);
+                                    const pMake = (p.make || '').toLowerCase();
+                                    const pModel = (p.model || '').toLowerCase();
+                                    const isCarMatch = vehicleMake && pMake && (vehicleMake.includes(pMake) || pMake.includes(vehicleMake)) &&
+                                      (!pModel || !vehicleModel || vehicleModel.includes(pModel) || pModel.includes(vehicleModel));
+                                    const isUniv = pMake === 'universal';
+
+                                    return (
+                                      <button
+                                        key={p.id}
+                                        type="button"
+                                        onClick={() => {
+                                          setExtraPartId(p.id);
+                                          setExtraPartName(p.name);
+                                          setExtraPartNumber(p.oem_part_number || p.oemPartNumber || p.part_number || p.partNumber || '');
+                                          setExtraPartDesc(p.compatibility_notes || p.compatibilityNotes || p.description || '');
+                                          setExtraPartPrice(String(p.price || '0'));
+                                          setExtraPartUnit(p.unit || 'pieces');
+                                          setPartSearchQuery(p.name);
+                                          setIsPartDropdownOpen(false);
+                                        }}
+                                        className={`w-full text-left p-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors flex items-center justify-between gap-3 ${
+                                          isCarMatch ? 'bg-emerald-500/[0.04]' : ''
+                                        }`}
+                                      >
+                                        <div className="space-y-1 min-w-0">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <p className="text-xs font-bold text-gray-900 dark:text-slate-100 truncate">
+                                              {p.name}
+                                            </p>
+                                            {p.brand && (
+                                              <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                                {p.brand}
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          <div className="flex flex-wrap items-center gap-1.5">
+                                            {isCarMatch ? (
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
+                                                🎯 Fits {p.make} {p.model} {p.generation ? `(${p.generation})` : ''}
+                                              </span>
+                                            ) : isUniv ? (
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                                🌐 Universal
+                                              </span>
+                                            ) : p.make ? (
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
+                                                {p.make} {p.model}
+                                              </span>
+                                            ) : null}
+
+                                            {(p.oem_part_number || p.oemPartNumber) && (
+                                              <span className="text-[10px] font-mono text-primary-600 dark:text-primary-400">
+                                                OEM: {p.oem_part_number || p.oemPartNumber}
+                                              </span>
+                                            )}
+
+                                            <span className={`text-[10px] font-semibold ${isLow ? 'text-red-400' : 'text-slate-400'}`}>
+                                              Stock: {stockQty} {p.unit || 'pcs'}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        <span className="text-xs font-extrabold text-primary-600 dark:text-primary-400 shrink-0">
+                                          {formatCurrency(p.price)}
+                                        </span>
+                                      </button>
+                                    );
+                                  })
+                                ) : (
+                                  <div className="p-4 text-center text-xs text-slate-400">
+                                    No inventory parts matched "{partSearchQuery}". You can enter custom details below or click "+ Add New Part to Inventory" above.
+                                  </div>
+                                )}
+                              </div>
+                            </>
                           )}
                         </div>
-
-                        {/* Dropdown Popover */}
-                        {isPartDropdownOpen && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-40"
-                              onClick={() => setIsPartDropdownOpen(false)}
-                            />
-                            <div className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl divide-y divide-gray-100 dark:divide-slate-800">
-                              {filteredCatalogParts.length > 0 ? (
-                                filteredCatalogParts.map((p: any) => {
-                                  const stockQty = Number(p.stock_quantity ?? p.stock ?? 0);
-                                  const isLow = stockQty <= Number(p.min_stock_level ?? p.minStock ?? 5);
-                                  return (
-                                    <button
-                                      key={p.id}
-                                      type="button"
-                                      onClick={() => {
-                                        setExtraPartId(p.id);
-                                        setExtraPartName(p.name);
-                                        setExtraPartNumber(p.part_number || '');
-                                        setExtraPartDesc(p.description || '');
-                                        setExtraPartPrice(String(p.price || '0'));
-                                        setExtraPartUnit(p.unit || 'pieces');
-                                        setPartSearchQuery(p.name);
-                                        setIsPartDropdownOpen(false);
-                                      }}
-                                      className="w-full text-left p-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors flex items-center justify-between gap-3"
-                                    >
-                                      <div className="space-y-0.5 min-w-0">
-                                        <p className="text-xs font-bold text-gray-900 dark:text-slate-100 truncate">
-                                          {p.name} {p.part_number ? `(${p.part_number})` : ''}
-                                        </p>
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium border border-slate-200 dark:border-slate-700">
-                                            {p.category || 'General'}
-                                          </span>
-                                          <span className={`text-[10px] font-semibold ${isLow ? 'text-red-400' : 'text-slate-400'}`}>
-                                            Stock: {stockQty} {p.unit || 'pcs'}
-                                          </span>
-                                        </div>
-                                      </div>
-                                      <span className="text-xs font-extrabold text-primary-600 dark:text-primary-400 shrink-0">
-                                        {formatCurrency(p.price)}
-                                      </span>
-                                    </button>
-                                  );
-                                })
-                              ) : (
-                                <div className="p-4 text-center text-xs text-slate-400">
-                                  No inventory parts matched "{partSearchQuery}". You can enter custom part details below.
-                                </div>
-                              )}
-                            </div>
-                          </>
-                        )}
-                      </div>
+                      )}
                     </div>
                   )}
 
