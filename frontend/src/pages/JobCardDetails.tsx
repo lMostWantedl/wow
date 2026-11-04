@@ -37,6 +37,7 @@ import {
   ChevronRight,
   DollarSign,
   Search,
+  Building2,
   X
 } from 'lucide-react';
 
@@ -70,7 +71,7 @@ const JobCardDetails: React.FC = () => {
 
   // Modals state
   const [showExtraWorkModal, setShowExtraWorkModal] = useState(false);
-  const [extraWorkTab, setExtraWorkTab] = useState<'service' | 'part'>('service');
+  const [extraWorkTab, setExtraWorkTab] = useState<'labor' | 'external' | 'part'>('labor');
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showTechModal, setShowTechModal] = useState(false);
 
@@ -79,9 +80,12 @@ const JobCardDetails: React.FC = () => {
   const [editingPart, setEditingPart] = useState<JobCardSparePart | null>(null);
 
   // Extra work form states
+  const [extraServiceType, setExtraServiceType] = useState<'LABOR' | 'EXTERNAL_SERVICE'>('LABOR');
   const [extraServiceId, setExtraServiceId] = useState('');
   const [extraServiceName, setExtraServiceName] = useState('');
   const [extraServiceDesc, setExtraServiceDesc] = useState('');
+  const [extraServiceVendor, setExtraServiceVendor] = useState('');
+  const [extraServiceCost, setExtraServiceCost] = useState('0');
   const [extraServiceHours, setExtraServiceHours] = useState('1');
   const [extraServicePrice, setExtraServicePrice] = useState('0');
   const [extraServiceIsExtra, setExtraServiceIsExtra] = useState(false);
@@ -153,14 +157,36 @@ const JobCardDetails: React.FC = () => {
   }, [servicesCatalog]);
 
   const filteredCatalogServices = React.useMemo(() => {
-    if (!serviceSearchQuery.trim()) return catalogServicesList;
+    let list = catalogServicesList;
+    if (extraWorkTab === 'external') {
+      if (!serviceSearchQuery.trim()) {
+        const external = list.filter((s: any) =>
+          s.service_type === 'EXTERNAL_SERVICE' ||
+          s.serviceType === 'EXTERNAL_SERVICE' ||
+          /injector|turbo|lathe|skimming|balancing|calibration|denting|painting|sublet|external/i.test(s.name || '') ||
+          /injector|turbo|lathe|skimming|sublet|external/i.test(s.category || '')
+        );
+        return external.length > 0 ? external : list;
+      }
+    } else if (extraWorkTab === 'labor') {
+      if (!serviceSearchQuery.trim()) {
+        const labor = list.filter((s: any) =>
+          s.service_type !== 'EXTERNAL_SERVICE' &&
+          s.serviceType !== 'EXTERNAL_SERVICE' &&
+          !/injector|turbo|lathe|skimming|sublet|external/i.test(s.category || '')
+        );
+        return labor.length > 0 ? labor : list;
+      }
+    }
+
+    if (!serviceSearchQuery.trim()) return list;
     const q = serviceSearchQuery.toLowerCase();
-    return catalogServicesList.filter((s: any) =>
+    return list.filter((s: any) =>
       s.name?.toLowerCase().includes(q) ||
       s.category?.toLowerCase().includes(q) ||
       s.description?.toLowerCase().includes(q)
     );
-  }, [catalogServicesList, serviceSearchQuery]);
+  }, [catalogServicesList, serviceSearchQuery, extraWorkTab]);
 
   const catalogPartsList = React.useMemo(() => {
     return sparePartsCatalog?.spareParts || (Array.isArray(sparePartsCatalog) ? sparePartsCatalog : []);
@@ -365,12 +391,15 @@ const JobCardDetails: React.FC = () => {
     setExtraServiceId('');
     setExtraServiceName('');
     setExtraServiceDesc('');
+    setExtraServiceVendor('');
+    setExtraServiceCost('0');
     setExtraServiceHours('1');
     setExtraServicePrice('0');
     setExtraServiceIsExtra(false);
     setExtraServiceTechIds([]);
     setServiceSearchQuery('');
     setIsServiceDropdownOpen(false);
+    setExtraServiceType('LABOR');
   };
 
   const resetPartForm = () => {
@@ -440,13 +469,25 @@ const JobCardDetails: React.FC = () => {
     }
   };
 
-  const openAddServiceModal = (isExtra: boolean = false) => {
+  const openAddLaborModal = (isExtra: boolean = false) => {
     resetServiceForm();
     resetPartForm();
+    setExtraServiceType('LABOR');
     setExtraServiceIsExtra(isExtra);
-    setExtraWorkTab('service');
+    setExtraWorkTab('labor');
     setShowExtraWorkModal(true);
   };
+
+  const openAddExternalServiceModal = (isExtra: boolean = false) => {
+    resetServiceForm();
+    resetPartForm();
+    setExtraServiceType('EXTERNAL_SERVICE');
+    setExtraServiceIsExtra(isExtra);
+    setExtraWorkTab('external');
+    setShowExtraWorkModal(true);
+  };
+
+  const openAddServiceModal = openAddLaborModal;
 
   const openAddPartModal = (isExtra: boolean = false) => {
     resetServiceForm();
@@ -461,10 +502,14 @@ const JobCardDetails: React.FC = () => {
   const openEditService = (service: JobCardService) => {
     setEditingService(service);
     setEditingPart(null);
-    setExtraWorkTab('service');
+    const isExt = service.service_type === 'EXTERNAL_SERVICE';
+    setExtraServiceType(isExt ? 'EXTERNAL_SERVICE' : 'LABOR');
+    setExtraWorkTab(isExt ? 'external' : 'labor');
     setExtraServiceId(service.service_id || '');
     setExtraServiceName(service.service_name);
     setExtraServiceDesc(service.description || '');
+    setExtraServiceVendor(service.vendor_name || '');
+    setExtraServiceCost(String(service.cost_price || 0));
     setExtraServiceHours(String(service.hours_qty || 1));
     setExtraServicePrice(String(service.unit_price || 0));
     setExtraServiceIsExtra(Boolean(service.is_extra_work));
@@ -504,7 +549,6 @@ const JobCardDetails: React.FC = () => {
     );
   };
 
-
   const handleAddExtraService = (e: React.FormEvent) => {
     e.preventDefault();
     if (!extraServiceName.trim()) {
@@ -512,28 +556,26 @@ const JobCardDetails: React.FC = () => {
       return;
     }
 
+    const payload = {
+      serviceId: extraServiceId || undefined,
+      serviceName: extraServiceName,
+      serviceType: extraServiceType,
+      vendorName: extraServiceType === 'EXTERNAL_SERVICE' ? (extraServiceVendor.trim() || undefined) : undefined,
+      costPrice: extraServiceType === 'EXTERNAL_SERVICE' ? (parseFloat(extraServiceCost) || 0) : undefined,
+      description: extraServiceDesc,
+      hoursQty: parseFloat(extraServiceHours) || 1,
+      unitPrice: parseFloat(extraServicePrice) || 0,
+      isExtraWork: extraServiceIsExtra,
+      technicianIds: extraServiceType === 'LABOR' ? extraServiceTechIds : []
+    };
+
     if (editingService) {
       updateServiceMutation.mutate({
         serviceId: editingService.id,
-        data: {
-          serviceName: extraServiceName,
-          description: extraServiceDesc,
-          hoursQty: parseFloat(extraServiceHours) || 1,
-          unitPrice: parseFloat(extraServicePrice) || 0,
-          isExtraWork: extraServiceIsExtra,
-          technicianIds: extraServiceTechIds
-        }
+        data: payload
       });
     } else {
-      addServiceMutation.mutate({
-        serviceId: extraServiceId || undefined,
-        serviceName: extraServiceName,
-        description: extraServiceDesc,
-        hoursQty: parseFloat(extraServiceHours) || 1,
-        unitPrice: parseFloat(extraServicePrice) || 0,
-        isExtraWork: extraServiceIsExtra,
-        technicianIds: extraServiceTechIds
-      });
+      addServiceMutation.mutate(payload);
     }
   };
 
@@ -610,25 +652,37 @@ const JobCardDetails: React.FC = () => {
   const services = jobCard.services || [];
   const spareParts = jobCard.spareParts || [];
 
-  // Categorize initial quotation vs extra work
-  const initialServices = services.filter(s => !s.is_extra_work);
-  const extraServices = services.filter(s => s.is_extra_work);
+  // Separate services into:
+  // 1. In-House Workshop Labor
+  // 2. Specialized & External Sublet Services
+  const laborServices = services.filter((s: any) => (s.service_type || 'LABOR') !== 'EXTERNAL_SERVICE');
+  const externalServices = services.filter((s: any) => s.service_type === 'EXTERNAL_SERVICE');
 
-  const initialParts = spareParts.filter(p => !p.is_extra_work);
-  const extraParts = spareParts.filter(p => p.is_extra_work);
-
-  // Subtotals
-  const initialLaborSubtotal = initialServices.reduce((sum, s) => sum + Number(s.total_price || 0), 0);
-  const extraLaborSubtotal = extraServices.reduce((sum, s) => sum + Number(s.total_price || 0), 0);
+  // Categorize initial quotation vs extra work for labor
+  const initialLabor = laborServices.filter((s: any) => !s.is_extra_work);
+  const extraLabor = laborServices.filter((s: any) => s.is_extra_work);
+  const initialLaborSubtotal = initialLabor.reduce((sum: number, s: any) => sum + Number(s.total_price || 0), 0);
+  const extraLaborSubtotal = extraLabor.reduce((sum: number, s: any) => sum + Number(s.total_price || 0), 0);
   const totalLabor = initialLaborSubtotal + extraLaborSubtotal;
 
-  const initialPartsSubtotal = initialParts.reduce((sum, p) => sum + Number(p.total_price || 0), 0);
-  const extraPartsSubtotal = extraParts.reduce((sum, p) => sum + Number(p.total_price || 0), 0);
+  // Categorize initial quotation vs extra work for external sublet services
+  const initialExternal = externalServices.filter((s: any) => !s.is_extra_work);
+  const extraExternal = externalServices.filter((s: any) => s.is_extra_work);
+  const initialExternalSubtotal = initialExternal.reduce((sum: number, s: any) => sum + Number(s.total_price || 0), 0);
+  const extraExternalSubtotal = extraExternal.reduce((sum: number, s: any) => sum + Number(s.total_price || 0), 0);
+  const totalExternal = initialExternalSubtotal + extraExternalSubtotal;
+
+  // Categorize initial quotation vs extra work for spare parts
+  const initialParts = spareParts.filter((p: any) => !p.is_extra_work);
+  const extraParts = spareParts.filter((p: any) => p.is_extra_work);
+  const initialPartsSubtotal = initialParts.reduce((sum: number, p: any) => sum + Number(p.total_price || 0), 0);
+  const extraPartsSubtotal = extraParts.reduce((sum: number, p: any) => sum + Number(p.total_price || 0), 0);
   const totalParts = initialPartsSubtotal + extraPartsSubtotal;
 
-  const totalEstimate = initialLaborSubtotal + initialPartsSubtotal;
-  const totalExtra = extraLaborSubtotal + extraPartsSubtotal;
-  const grandTotal = totalLabor + totalParts;
+  // Combined totals
+  const totalEstimate = initialLaborSubtotal + initialExternalSubtotal + initialPartsSubtotal;
+  const totalExtra = extraLaborSubtotal + extraExternalSubtotal + extraPartsSubtotal;
+  const grandTotal = totalLabor + totalExternal + totalParts;
 
   // Invoice calculations for modal preview
   const previewDiscount = parseFloat(invoiceDiscount) || 0;
@@ -1003,19 +1057,24 @@ const JobCardDetails: React.FC = () => {
         </div>
       </div>
 
-      {/* SECTION 1: Services & Labor (Separating Initial Quotation vs Extra Work) */}
+      {/* SECTION 1: In-House Workshop Labor & Operations */}
       <div className="card bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs overflow-hidden">
         <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-primary-100 dark:bg-primary-950/60 text-primary-600 dark:text-primary-400">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
               <Wrench className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-gray-900 dark:text-slate-100">
-                Services & Labor
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-gray-900 dark:text-slate-100">
+                  In-House Workshop Labor
+                </h2>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  Technicians
+                </span>
+              </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {services.length} {services.length === 1 ? 'service item' : 'service items'} recorded
+                {laborServices.length} {laborServices.length === 1 ? 'labor operation' : 'labor operations'} recorded
               </p>
             </div>
           </div>
@@ -1026,8 +1085,8 @@ const JobCardDetails: React.FC = () => {
             </span>
             {!isLocked && (
               <button
-                onClick={() => openAddServiceModal(false)}
-                className="btn btn-secondary text-xs py-1.5 px-2.5 flex items-center gap-1"
+                onClick={() => openAddLaborModal(false)}
+                className="btn btn-secondary text-xs py-1.5 px-2.5 flex items-center gap-1.5"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Add Labor</span>
@@ -1036,25 +1095,26 @@ const JobCardDetails: React.FC = () => {
           </div>
         </div>
 
-        {services.length === 0 ? (
+        {laborServices.length === 0 ? (
           <div className="p-8 text-center text-xs text-slate-400">
-            No labor services recorded in this Job Card.
+            No in-house workshop labor operations recorded in this Job Card.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 dark:bg-slate-900/80 text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold border-b border-gray-200 dark:border-slate-800">
                 <tr>
-                  <th className="py-3 px-4">Service / Scope</th>
+                  <th className="py-3 px-4">Labor Operation / Task</th>
                   <th className="py-3 px-4">Origin / Type</th>
-                  <th className="py-3 px-4 text-center">Hours / Qty</th>
-                  <th className="py-3 px-4 text-right">Rate</th>
+                  <th className="py-3 px-4">Assigned Technicians</th>
+                  <th className="py-3 px-4 text-center">Hours</th>
+                  <th className="py-3 px-4 text-right">Hourly Rate</th>
                   <th className="py-3 px-4 text-right">Total</th>
                   {!isLocked && <th className="py-3 px-4 text-center">Action</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-                {services.map((item: any) => (
+                {laborServices.map((item: any) => (
                   <tr
                     key={item.id}
                     className={`hover:bg-slate-50/50 dark:hover:bg-slate-900/40 transition-colors ${
@@ -1068,9 +1128,22 @@ const JobCardDetails: React.FC = () => {
                       {item.description && (
                         <p className="text-[11px] text-slate-400 mt-0.5">{item.description}</p>
                       )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {item.is_extra_work ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                          <Sparkles className="h-3 w-3 text-amber-500" />
+                          Extra Work
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                          Initial Quotation
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
                       {item.assigned_technicians && item.assigned_technicians.length > 0 ? (
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                          <span className="text-[10px] text-slate-400 font-medium">Assigned:</span>
+                        <div className="flex flex-wrap items-center gap-1.5">
                           {item.assigned_technicians.map((t: any) => (
                             <span
                               key={t.id}
@@ -1087,20 +1160,13 @@ const JobCardDetails: React.FC = () => {
                           ))}
                         </div>
                       ) : item.technician_name ? (
-                        <p className="text-[10px] text-primary-500 font-medium mt-0.5">
-                          Assigned: {item.technician_name}
-                        </p>
-                      ) : null}
-                    </td>
-                    <td className="py-3 px-4">
-                      {item.is_extra_work ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
-                          <Sparkles className="h-3 w-3 text-amber-500" />
-                          Extra Work (Mid-Repair)
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary-50 dark:bg-primary-950/60 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800">
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary-500"></span>
+                          {item.technician_name}
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                          Initial Quotation
+                        <span className="text-[10px] italic text-slate-400">
+                          Unassigned / General Team
                         </span>
                       )}
                     </td>
@@ -1119,14 +1185,14 @@ const JobCardDetails: React.FC = () => {
                           <button
                             onClick={() => openEditService(item)}
                             className="p-1.5 rounded text-primary-600 dark:text-primary-400 hover:text-primary-800 hover:bg-primary-50 dark:hover:bg-primary-950/50 transition-colors"
-                            title="Edit service & assign technicians"
+                            title="Edit labor operation"
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
                           <button
                             onClick={() => removeServiceMutation.mutate(item.id)}
                             className="p-1.5 rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
-                            title="Remove service"
+                            title="Remove labor operation"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
@@ -1141,7 +1207,7 @@ const JobCardDetails: React.FC = () => {
         )}
 
         {/* Labor Subtotal Breakdown */}
-        {services.length > 0 && (
+        {laborServices.length > 0 && (
           <div className="p-3 bg-slate-50/70 dark:bg-slate-900/60 border-t border-gray-100 dark:border-slate-800 text-xs flex flex-wrap items-center justify-end gap-5">
             <span className="text-slate-500">
               Quotation Labor: <strong className="text-slate-800 dark:text-slate-200">{formatCurrency(initialLaborSubtotal)}</strong>
@@ -1158,7 +1224,158 @@ const JobCardDetails: React.FC = () => {
         )}
       </div>
 
-      {/* SECTION 2: Spare Parts & Materials (Separating Initial Quotation vs Extra Work) */}
+      {/* SECTION 2: Specialized & External Sublet Services */}
+      <div className="card bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs overflow-hidden">
+        <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+              <ExternalLink className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-gray-900 dark:text-slate-100">
+                  Specialized & External Sublet Services
+                </h2>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                  Outsourced / Lab
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Injector testing, turbo overhaul, lathe disk skimming, and sublet specialized jobs ({externalServices.length} {externalServices.length === 1 ? 'service' : 'services'} recorded)
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+              External Total: <span className="text-indigo-600 dark:text-indigo-400">{formatCurrency(totalExternal)}</span>
+            </span>
+            {!isLocked && (
+              <button
+                onClick={() => openAddExternalServiceModal(false)}
+                className="btn btn-secondary text-xs py-1.5 px-2.5 flex items-center gap-1.5"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Add External Service</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {externalServices.length === 0 ? (
+          <div className="p-8 text-center text-xs text-slate-400">
+            No specialized or outsourced external services recorded in this Job Card.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-900/80 text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold border-b border-gray-200 dark:border-slate-800">
+                <tr>
+                  <th className="py-3 px-4">External Service / Scope</th>
+                  <th className="py-3 px-4">Origin / Type</th>
+                  <th className="py-3 px-4">Specialized Vendor / Lab</th>
+                  <th className="py-3 px-4 text-center">Qty / Jobs</th>
+                  <th className="py-3 px-4 text-right">Billed Rate</th>
+                  <th className="py-3 px-4 text-right">Total</th>
+                  {!isLocked && <th className="py-3 px-4 text-center">Action</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                {externalServices.map((item: any) => (
+                  <tr
+                    key={item.id}
+                    className={`hover:bg-slate-50/50 dark:hover:bg-slate-900/40 transition-colors ${
+                      item.is_extra_work ? 'bg-amber-500/[0.03]' : ''
+                    }`}
+                  >
+                    <td className="py-3 px-4">
+                      <p className="font-bold text-gray-900 dark:text-slate-100">
+                        {item.service_name}
+                      </p>
+                      {item.description && (
+                        <p className="text-[11px] text-slate-400 mt-0.5">{item.description}</p>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {item.is_extra_work ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                          <Sparkles className="h-3 w-3 text-amber-500" />
+                          Extra Work
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                          Initial Quotation
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 w-fit">
+                          <Building2 className="h-3 w-3 text-indigo-500" />
+                          {item.vendor_name || 'Specialist Lab / Sublet Vendor'}
+                        </span>
+                        {Number(item.cost_price) > 0 && (
+                          <span className="text-[10px] text-slate-400">
+                            Sublet Cost: {formatCurrency(item.cost_price)}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-center font-medium">
+                      {formatQuantity(item.hours_qty)}
+                    </td>
+                    <td className="py-3 px-4 text-right font-medium">
+                      {formatCurrency(item.unit_price)}
+                    </td>
+                    <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-slate-100">
+                      {formatCurrency(item.total_price)}
+                    </td>
+                    {!isLocked && (
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => openEditService(item)}
+                            className="p-1.5 rounded text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors"
+                            title="Edit external service"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => removeServiceMutation.mutate(item.id)}
+                            className="p-1.5 rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
+                            title="Remove external service"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* External Subtotal Breakdown */}
+        {externalServices.length > 0 && (
+          <div className="p-3 bg-slate-50/70 dark:bg-slate-900/60 border-t border-gray-100 dark:border-slate-800 text-xs flex flex-wrap items-center justify-end gap-5">
+            <span className="text-slate-500">
+              Quotation External: <strong className="text-slate-800 dark:text-slate-200">{formatCurrency(initialExternalSubtotal)}</strong>
+            </span>
+            {extraExternalSubtotal > 0 && (
+              <span className="text-amber-600 dark:text-amber-400">
+                Extra External: <strong>{formatCurrency(extraExternalSubtotal)}</strong>
+              </span>
+            )}
+            <span className="font-bold text-indigo-600 dark:text-indigo-400">
+              Total External: {formatCurrency(totalExternal)}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* SECTION 3: Spare Parts & Materials (Separating Initial Quotation vs Extra Work) */}
       <div className="card bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs overflow-hidden">
         <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
@@ -1295,7 +1512,7 @@ const JobCardDetails: React.FC = () => {
         )}
       </div>
 
-      {/* SECTION 3: Summary & Financial Totals */}
+      {/* SECTION 4: Summary & Financial Totals */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Cost Analysis Card */}
         <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
@@ -1304,11 +1521,17 @@ const JobCardDetails: React.FC = () => {
             <span>Cost Analysis & Scope Variance</span>
           </h3>
 
-          <div className="space-y-2.5 text-xs">
+          <div className="space-y-2 text-xs">
             <div className="flex justify-between items-center py-1 border-b border-gray-100 dark:border-slate-800">
               <span className="text-slate-500">Initial Estimated Labor:</span>
               <span className="font-medium text-slate-800 dark:text-slate-200">{formatCurrency(initialLaborSubtotal)}</span>
             </div>
+            {initialExternalSubtotal > 0 && (
+              <div className="flex justify-between items-center py-1 border-b border-gray-100 dark:border-slate-800">
+                <span className="text-slate-500">Initial External Sublet Services:</span>
+                <span className="font-medium text-slate-800 dark:text-slate-200">{formatCurrency(initialExternalSubtotal)}</span>
+              </div>
+            )}
             <div className="flex justify-between items-center py-1 border-b border-gray-100 dark:border-slate-800">
               <span className="text-slate-500">Initial Estimated Parts:</span>
               <span className="font-medium text-slate-800 dark:text-slate-200">{formatCurrency(initialPartsSubtotal)}</span>
@@ -1328,7 +1551,22 @@ const JobCardDetails: React.FC = () => {
               </div>
             )}
 
-            <div className="flex justify-between items-center pt-2 text-sm font-bold text-gray-900 dark:text-white">
+            <div className="pt-2 border-t border-gray-100 dark:border-slate-800 space-y-1">
+              <div className="flex justify-between items-center text-[11px] text-slate-500">
+                <span>Workshop Labor Total:</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(totalLabor)}</span>
+              </div>
+              <div className="flex justify-between items-center text-[11px] text-slate-500">
+                <span>External Sublet Services Total:</span>
+                <span className="font-semibold text-indigo-600 dark:text-indigo-400">{formatCurrency(totalExternal)}</span>
+              </div>
+              <div className="flex justify-between items-center text-[11px] text-slate-500">
+                <span>Spare Parts & Materials Total:</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(totalParts)}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center pt-2 text-sm font-bold text-gray-900 dark:text-white border-t border-gray-200 dark:border-slate-800">
               <span>Grand Total Amount:</span>
               <span className="text-base text-primary-600 dark:text-primary-400">{formatCurrency(grandTotal)}</span>
             </div>
@@ -1381,7 +1619,7 @@ const JobCardDetails: React.FC = () => {
       </div>
 
       {/* ========================================================================= */}
-      {/* MODAL 1: ADD / EDIT WORK (SERVICE OR SPARE PART)                           */}
+      {/* MODAL 1: ADD / EDIT WORK (LABOR, EXTERNAL SUBLET, OR SPARE PART)          */}
       {/* ========================================================================= */}
       {showExtraWorkModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
@@ -1390,16 +1628,20 @@ const JobCardDetails: React.FC = () => {
               <div className="flex items-center gap-2 text-primary-600 dark:text-primary-400">
                 {editingService || editingPart ? (
                   <Pencil className="h-5 w-5" />
+                ) : extraWorkTab === 'external' ? (
+                  <ExternalLink className="h-5 w-5 text-indigo-500" />
                 ) : (
                   <Wrench className="h-5 w-5 text-primary-500" />
                 )}
                 <h3 className="font-bold text-base text-gray-900 dark:text-slate-100">
                   {editingService
-                    ? 'Edit Service / Labor'
+                    ? (extraServiceType === 'EXTERNAL_SERVICE' ? 'Edit External Sublet Service' : 'Edit Workshop Labor')
                     : editingPart
                     ? 'Edit Spare Part / Material'
-                    : extraWorkTab === 'service'
-                    ? (extraServiceIsExtra ? 'Add Extra Work Labor' : 'Add Labor Service')
+                    : extraWorkTab === 'labor'
+                    ? (extraServiceIsExtra ? 'Add Extra Workshop Labor' : 'Add Planned Workshop Labor')
+                    : extraWorkTab === 'external'
+                    ? (extraServiceIsExtra ? 'Add Extra External Sublet Service' : 'Add Planned External Sublet Service')
                     : (extraPartIsExtra ? 'Add Extra Spare Part' : 'Add Spare Part')}
                 </h3>
               </div>
@@ -1415,57 +1657,79 @@ const JobCardDetails: React.FC = () => {
               </button>
             </div>
 
-            {/* Sub-tabs: Labor vs Part (Only toggleable when adding new items) */}
+            {/* Sub-tabs: Labor vs External vs Part (Only toggleable when adding new items) */}
             {!editingService && !editingPart ? (
               <div className="flex border-b border-gray-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setExtraWorkTab('service')}
-                  className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-2 border-b-2 transition-all ${
-                    extraWorkTab === 'service'
+                  onClick={() => {
+                    setExtraWorkTab('labor');
+                    setExtraServiceType('LABOR');
+                  }}
+                  className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 border-b-2 transition-all ${
+                    extraWorkTab === 'labor'
                       ? 'border-primary-500 text-primary-600 dark:text-primary-400 bg-white dark:bg-[#0e1424]'
                       : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                   }`}
                 >
-                  <Wrench className="h-4 w-4" />
-                  <span>Labor / Service</span>
+                  <Wrench className="h-3.5 w-3.5" />
+                  <span>Workshop Labor</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExtraWorkTab('external');
+                    setExtraServiceType('EXTERNAL_SERVICE');
+                  }}
+                  className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 border-b-2 transition-all ${
+                    extraWorkTab === 'external'
+                      ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-white dark:bg-[#0e1424]'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span>External Sublet</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setExtraWorkTab('part')}
-                  className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-2 border-b-2 transition-all ${
+                  className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 border-b-2 transition-all ${
                     extraWorkTab === 'part'
                       ? 'border-primary-500 text-primary-600 dark:text-primary-400 bg-white dark:bg-[#0e1424]'
                       : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                   }`}
                 >
-                  <Package className="h-4 w-4" />
-                  <span>Spare Part / Material</span>
+                  <Package className="h-3.5 w-3.5" />
+                  <span>Spare Part</span>
                 </button>
               </div>
             ) : (
               <div className="px-5 py-2.5 bg-slate-50 dark:bg-slate-900/40 border-b border-gray-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 shrink-0">
                 {editingService ? (
                   <>
-                    <Wrench className="h-4 w-4 text-primary-500" />
-                    <span>Modifying details and origin type for <strong>{editingService.service_name}</strong></span>
+                    {extraServiceType === 'EXTERNAL_SERVICE' ? (
+                      <ExternalLink className="h-4 w-4 text-indigo-500" />
+                    ) : (
+                      <Wrench className="h-4 w-4 text-primary-500" />
+                    )}
+                    <span>Modifying details for <strong>{editingService.service_name}</strong></span>
                   </>
                 ) : (
                   <>
                     <Package className="h-4 w-4 text-primary-500" />
-                    <span>Modifying details and origin type for <strong>{editingPart?.part_name}</strong></span>
+                    <span>Modifying details for <strong>{editingPart?.part_name}</strong></span>
                   </>
                 )}
               </div>
             )}
 
             <div className="p-5 overflow-y-auto flex-1">
-              {extraWorkTab === 'service' ? (
+              {extraWorkTab === 'labor' ? (
                 <form onSubmit={handleAddExtraService} className="space-y-4">
                   {/* Origin / Classification Selector */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Work Scope / Classification *
+                      Labor Scope / Classification *
                     </label>
                     <div className="grid grid-cols-2 gap-2.5">
                       <button
@@ -1488,7 +1752,7 @@ const JobCardDetails: React.FC = () => {
                           </span>
                         </div>
                         <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 pl-5 leading-tight">
-                          Planned scope included in initial customer estimate
+                          Planned labor in initial customer estimate
                         </p>
                       </button>
 
@@ -1513,13 +1777,13 @@ const JobCardDetails: React.FC = () => {
                           </span>
                         </div>
                         <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 pl-5 leading-tight">
-                          Discovered mid-repair, billed as additional scope
+                          Discovered mid-repair, billed additionally
                         </p>
                       </button>
                     </div>
                   </div>
 
-                  {/* Catalog quick-picker (Searchable Combobox) */}
+                  {/* Catalog quick-picker */}
                   {!editingService && (
                     <div>
                       <div className="flex items-center justify-between mb-1">
@@ -1543,7 +1807,7 @@ const JobCardDetails: React.FC = () => {
                               setIsServiceDropdownOpen(true);
                             }}
                             onFocus={() => setIsServiceDropdownOpen(true)}
-                            placeholder="Search service catalog by name, category, or keyword..."
+                            placeholder="Search in-house labor catalog..."
                             className="input pl-9 pr-8 w-full text-xs"
                           />
                           {(serviceSearchQuery || extraServiceId) && (
@@ -1617,7 +1881,7 @@ const JobCardDetails: React.FC = () => {
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Service / Labor Name *
+                      Labor Operation Name *
                     </label>
                     <input
                       type="text"
@@ -1680,14 +1944,14 @@ const JobCardDetails: React.FC = () => {
                         Assign Technicians ({extraServiceTechIds.length} Selected)
                       </label>
                       <span className="text-[11px] text-slate-400">
-                        Multiple technicians supported
+                        Optional / Multi-select
                       </span>
                     </div>
 
                     <div className="p-2.5 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40 text-[11px] text-blue-800 dark:text-blue-300 mb-2 flex items-start gap-1.5">
                       <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-blue-500" />
                       <span>
-                        Assigned staff will be automatically added to this Job Card's Workshop Technicians team.
+                        Can be assigned to technicians or left unassigned for general workshop team.
                       </span>
                     </div>
 
@@ -1750,10 +2014,295 @@ const JobCardDetails: React.FC = () => {
                       className="btn btn-primary text-xs"
                     >
                       {editingService
-                        ? (updateServiceMutation.isLoading ? 'Saving...' : 'Save Service Changes')
+                        ? (updateServiceMutation.isLoading ? 'Saving...' : 'Save Labor Changes')
                         : (addServiceMutation.isLoading
                             ? 'Adding...'
-                            : (extraServiceIsExtra ? 'Add Extra Service' : 'Add Planned Service'))}
+                            : (extraServiceIsExtra ? 'Add Extra Labor' : 'Add Planned Labor'))}
+                    </button>
+                  </div>
+                </form>
+              ) : extraWorkTab === 'external' ? (
+                <form onSubmit={handleAddExtraService} className="space-y-4">
+                  {/* Origin / Classification Selector */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Sublet Service Scope / Classification *
+                    </label>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setExtraServiceIsExtra(false)}
+                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                          !extraServiceIsExtra
+                            ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-500 dark:border-blue-700 ring-1 ring-blue-500'
+                            : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${
+                            !extraServiceIsExtra ? 'border-blue-600 bg-blue-600' : 'border-slate-400'
+                          }`}>
+                            {!extraServiceIsExtra && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
+                          </span>
+                          <span className="text-xs font-bold text-gray-900 dark:text-slate-100">
+                            Initial Quotation
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 pl-5 leading-tight">
+                          Planned sublet work in initial customer estimate
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setExtraServiceIsExtra(true)}
+                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                          extraServiceIsExtra
+                            ? 'bg-amber-50/80 dark:bg-amber-950/40 border-amber-500 dark:border-amber-700 ring-1 ring-amber-500'
+                            : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${
+                            extraServiceIsExtra ? 'border-amber-600 bg-amber-600' : 'border-slate-400'
+                          }`}>
+                            {extraServiceIsExtra && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
+                          </span>
+                          <span className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                            <Sparkles className="h-3 w-3" />
+                            Extra Work
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 pl-5 leading-tight">
+                          Discovered mid-repair, billed additionally
+                        </p>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Catalog quick-picker for external services */}
+                  {!editingService && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                          Quick Select from External / Sublet Catalog (Optional)
+                        </label>
+                        {extraServiceId && (
+                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Catalog Item Linked
+                          </span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={serviceSearchQuery}
+                            onChange={(e) => {
+                              setServiceSearchQuery(e.target.value);
+                              setIsServiceDropdownOpen(true);
+                            }}
+                            onFocus={() => setIsServiceDropdownOpen(true)}
+                            placeholder="Search injector, turbo, lathe, AC gas, skimming..."
+                            className="input pl-9 pr-8 w-full text-xs"
+                          />
+                          {(serviceSearchQuery || extraServiceId) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setServiceSearchQuery('');
+                                setExtraServiceId('');
+                                setIsServiceDropdownOpen(false);
+                              }}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                              title="Clear selection"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Dropdown Popover */}
+                        {isServiceDropdownOpen && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-40"
+                              onClick={() => setIsServiceDropdownOpen(false)}
+                            />
+                            <div className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl divide-y divide-gray-100 dark:divide-slate-800">
+                              {filteredCatalogServices.length > 0 ? (
+                                filteredCatalogServices.map((s: any) => (
+                                  <button
+                                    key={s.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setExtraServiceId(s.id);
+                                      setExtraServiceName(s.name);
+                                      setExtraServiceDesc(s.description || '');
+                                      setExtraServicePrice(String(s.rate || s.price || '0'));
+                                      if (s.default_vendor || s.defaultVendor) {
+                                        setExtraServiceVendor(s.default_vendor || s.defaultVendor);
+                                      }
+                                      if (s.default_cost || s.defaultCost) {
+                                        setExtraServiceCost(String(s.default_cost || s.defaultCost));
+                                      }
+                                      setServiceSearchQuery(s.name);
+                                      setIsServiceDropdownOpen(false);
+                                    }}
+                                    className="w-full text-left p-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors flex items-center justify-between gap-3"
+                                  >
+                                    <div className="space-y-0.5 min-w-0">
+                                      <p className="text-xs font-bold text-gray-900 dark:text-slate-100 truncate">
+                                        {s.name}
+                                      </p>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-medium border border-indigo-200 dark:border-indigo-800">
+                                          {s.category || 'Specialized / Sublet'}
+                                        </span>
+                                        {(s.default_vendor || s.defaultVendor) && (
+                                          <span className="text-[10px] text-slate-400">
+                                            Vendor: {s.default_vendor || s.defaultVendor}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400 shrink-0">
+                                      {formatCurrency(s.rate || s.price)}
+                                    </span>
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="p-4 text-center text-xs text-slate-400">
+                                  No external services matched "{serviceSearchQuery}". You can enter custom details below.
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      External Sublet Service Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={extraServiceName}
+                      onChange={(e) => setExtraServiceName(e.target.value)}
+                      placeholder="e.g. Diesel Fuel Injector Testing & Calibration"
+                      className="input w-full text-xs"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Service Provider / Vendor Lab Name
+                      </label>
+                      <input
+                        type="text"
+                        value={extraServiceVendor}
+                        onChange={(e) => setExtraServiceVendor(e.target.value)}
+                        placeholder="e.g. Bosch Diesel Center, Precision Machine Shop"
+                        className="input w-full text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Sublet Procurement Cost (₹) <span className="text-[10px] text-slate-400 font-normal">(Internal cost)</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={extraServiceCost}
+                        onChange={(e) => setExtraServiceCost(e.target.value)}
+                        placeholder="0.00"
+                        className="input w-full text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Lab Test Scope / Findings Notes
+                    </label>
+                    <textarea
+                      value={extraServiceDesc}
+                      onChange={(e) => setExtraServiceDesc(e.target.value)}
+                      placeholder="e.g. 4 injectors sent for ultrasonic cleaning and spray pattern test..."
+                      rows={2}
+                      className="input w-full text-xs"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Quantity / Jobs
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0.5"
+                        value={extraServiceHours}
+                        onChange={(e) => setExtraServiceHours(e.target.value)}
+                        className="input w-full text-xs font-mono"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Customer Billed Price (₹)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={extraServicePrice}
+                        onChange={(e) => setExtraServicePrice(e.target.value)}
+                        className="input w-full text-xs font-mono"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Outsourced Info Box */}
+                  <div className="p-3 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/60 dark:border-indigo-900/40 text-[11px] text-indigo-800 dark:text-indigo-300 flex items-start gap-2">
+                    <Info className="h-4 w-4 shrink-0 mt-0.5 text-indigo-500" />
+                    <div>
+                      <p className="font-semibold">Specialized Sublet Operation</p>
+                      <p className="text-[10px] text-indigo-700/80 dark:text-indigo-300/80 mt-0.5">
+                        This work is performed by an outside specialized facility (diesel pump room, lathe shop, turbo rebuilder). Workshop technicians do not need to be assigned.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowExtraWorkModal(false);
+                        resetServiceForm();
+                      }}
+                      className="btn btn-secondary text-xs"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={addServiceMutation.isLoading || updateServiceMutation.isLoading}
+                      className="btn bg-indigo-600 hover:bg-indigo-700 text-white text-xs py-2 px-4 rounded-lg font-semibold"
+                    >
+                      {editingService
+                        ? (updateServiceMutation.isLoading ? 'Saving...' : 'Save External Service')
+                        : (addServiceMutation.isLoading
+                            ? 'Adding...'
+                            : (extraServiceIsExtra ? 'Add Extra External Service' : 'Add Planned External Service'))}
                     </button>
                   </div>
                 </form>
@@ -2568,47 +3117,113 @@ const JobCardDetails: React.FC = () => {
         </div>
 
         {/* Services & Spare Parts Checklist */}
-        <div className="border border-black p-4 mb-8 text-xs">
-          <h4 className="font-bold border-b border-gray-400 pb-1 mb-3 uppercase">Labor & Scope of Work Checklist</h4>
-          <table className="w-full text-left mb-4">
-            <thead>
-              <tr className="border-b border-black">
-                <th className="py-1">Type</th>
-                <th className="py-1">Description</th>
-                <th className="py-1 text-center">Done [✓]</th>
-                <th className="py-1 text-right">Technician Sign</th>
-              </tr>
-            </thead>
-            <tbody>
-              {services.map((s: any) => (
-                <tr key={s.id} className="border-b border-gray-200">
-                  <td className="py-1.5">{s.is_extra_work ? 'EXTRA WORK' : 'PLANNED'}</td>
-                  <td className="py-1.5 font-bold">
-                    {s.service_name}
-                    {s.assigned_technicians && s.assigned_technicians.length > 0 ? (
-                      <span className="block text-[10px] font-normal text-gray-700">
-                        Technicians: {s.assigned_technicians.map((t: any) => t.name).join(', ')}
-                      </span>
-                    ) : s.technician_name ? (
-                      <span className="block text-[10px] font-normal text-gray-700">
-                        Technician: {s.technician_name}
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="py-1.5 text-center">[  ]</td>
-                  <td className="py-1.5 text-right">________________</td>
+        <div className="border border-black p-4 mb-8 text-xs space-y-4">
+          <div>
+            <h4 className="font-bold border-b border-gray-400 pb-1 mb-2 uppercase">1. In-House Workshop Labor Checklist</h4>
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-black">
+                  <th className="py-1">Type</th>
+                  <th className="py-1">Labor Operation</th>
+                  <th className="py-1 text-center">Done [✓]</th>
+                  <th className="py-1 text-right">Technician Sign</th>
                 </tr>
-              ))}
-              {spareParts.map((p: any) => (
-                <tr key={p.id} className="border-b border-gray-200">
-                  <td className="py-1.5">{p.is_extra_work ? 'EXTRA PART' : 'REQUIRED PART'}</td>
-                  <td className="py-1.5">{p.part_name} (Qty: {formatQuantity(p.quantity)} {p.unit || 'pcs'})</td>
-                  <td className="py-1.5 text-center">[  ]</td>
-                  <td className="py-1.5 text-right">________________</td>
+              </thead>
+              <tbody>
+                {laborServices.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-2 italic text-gray-500">No in-house workshop labor operations.</td>
+                  </tr>
+                ) : (
+                  laborServices.map((s: any) => (
+                    <tr key={s.id} className="border-b border-gray-200">
+                      <td className="py-1.5">{s.is_extra_work ? 'EXTRA WORK' : 'PLANNED'}</td>
+                      <td className="py-1.5 font-bold">
+                        {s.service_name}
+                        {s.assigned_technicians && s.assigned_technicians.length > 0 ? (
+                          <span className="block text-[10px] font-normal text-gray-700">
+                            Technicians: {s.assigned_technicians.map((t: any) => t.name).join(', ')}
+                          </span>
+                        ) : s.technician_name ? (
+                          <span className="block text-[10px] font-normal text-gray-700">
+                            Technician: {s.technician_name}
+                          </span>
+                        ) : (
+                          <span className="block text-[10px] font-normal text-gray-500 italic">
+                            General Workshop Crew
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1.5 text-center">[  ]</td>
+                      <td className="py-1.5 text-right">________________</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div>
+            <h4 className="font-bold border-b border-gray-400 pb-1 mb-2 uppercase">2. Specialized & External Sublet Checklist</h4>
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-black">
+                  <th className="py-1">Type</th>
+                  <th className="py-1">Sublet Service</th>
+                  <th className="py-1">Specialized Vendor / Lab</th>
+                  <th className="py-1 text-center">Received [✓]</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {externalServices.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-2 italic text-gray-500">No outsourced or specialized sublet services.</td>
+                  </tr>
+                ) : (
+                  externalServices.map((s: any) => (
+                    <tr key={s.id} className="border-b border-gray-200">
+                      <td className="py-1.5">{s.is_extra_work ? 'EXTRA WORK' : 'PLANNED'}</td>
+                      <td className="py-1.5 font-bold">{s.service_name}</td>
+                      <td className="py-1.5">{s.vendor_name || 'Specialist Lab / Workshop'}</td>
+                      <td className="py-1.5 text-center">[  ]</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div>
+            <h4 className="font-bold border-b border-gray-400 pb-1 mb-2 uppercase">3. Required Spare Parts & Materials</h4>
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-black">
+                  <th className="py-1">Type</th>
+                  <th className="py-1">Part Name & Number</th>
+                  <th className="py-1 text-center">Qty</th>
+                  <th className="py-1 text-center">Fitted [✓]</th>
+                </tr>
+              </thead>
+              <tbody>
+                {spareParts.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-2 italic text-gray-500">No spare parts recorded.</td>
+                  </tr>
+                ) : (
+                  spareParts.map((p: any) => (
+                    <tr key={p.id} className="border-b border-gray-200">
+                      <td className="py-1.5">{p.is_extra_work ? 'EXTRA PART' : 'REQUIRED'}</td>
+                      <td className="py-1.5 font-medium">
+                        {p.part_name} {p.part_number ? `(${p.part_number})` : ''}
+                      </td>
+                      <td className="py-1.5 text-center">{formatQuantity(p.quantity)} {p.unit || 'pcs'}</td>
+                      <td className="py-1.5 text-center">[  ]</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Signatures */}
@@ -2661,40 +3276,83 @@ const JobCardDetails: React.FC = () => {
           </div>
         </div>
 
-        {/* Services / Labor Section */}
+        {/* Section 1: Workshop Labor */}
         <div className="mb-6">
-          <h4 className="font-bold text-xs uppercase border-b border-black pb-1 mb-2">Scope of Labor / Services</h4>
+          <h4 className="font-bold text-xs uppercase border-b border-black pb-1 mb-2">1. Scope of In-House Workshop Labor</h4>
           <table className="w-full text-xs text-left">
             <thead>
               <tr className="border-b border-gray-400">
-                <th className="py-1">Service</th>
+                <th className="py-1">Labor Operation</th>
                 <th className="py-1 text-center">Hours</th>
                 <th className="py-1 text-right">Rate</th>
                 <th className="py-1 text-right">Amount</th>
               </tr>
             </thead>
             <tbody>
-              {services.map((s: any) => (
-                <tr key={s.id} className="border-b border-gray-100">
-                  <td className="py-1">
-                    {s.service_name} {s.is_extra_work ? '(Supplementary)' : ''}
-                  </td>
-                  <td className="py-1 text-center">{formatQuantity(s.hours_qty)}</td>
-                  <td className="py-1 text-right">{formatCurrency(s.unit_price)}</td>
-                  <td className="py-1 text-right">{formatCurrency(s.total_price)}</td>
+              {laborServices.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-1 italic text-gray-500">No in-house labor operations.</td>
                 </tr>
-              ))}
+              ) : (
+                laborServices.map((s: any) => (
+                  <tr key={s.id} className="border-b border-gray-100">
+                    <td className="py-1">
+                      {s.service_name} {s.is_extra_work ? '(Supplementary Work)' : ''}
+                    </td>
+                    <td className="py-1 text-center">{formatQuantity(s.hours_qty)}</td>
+                    <td className="py-1 text-right">{formatCurrency(s.unit_price)}</td>
+                    <td className="py-1 text-right">{formatCurrency(s.total_price)}</td>
+                  </tr>
+                ))
+              )}
               <tr className="font-bold">
-                <td colSpan={3} className="text-right py-2">Labor Subtotal:</td>
+                <td colSpan={3} className="text-right py-2">Workshop Labor Subtotal:</td>
                 <td className="text-right py-2">{formatCurrency(totalLabor)}</td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        {/* Spare Parts Section */}
+        {/* Section 2: Specialized & External Sublet Services */}
         <div className="mb-6">
-          <h4 className="font-bold text-xs uppercase border-b border-black pb-1 mb-2">Required Spare Parts & Materials</h4>
+          <h4 className="font-bold text-xs uppercase border-b border-black pb-1 mb-2">2. Specialized & External Sublet Services</h4>
+          <table className="w-full text-xs text-left">
+            <thead>
+              <tr className="border-b border-gray-400">
+                <th className="py-1">Specialized Service / Vendor</th>
+                <th className="py-1 text-center">Jobs / Qty</th>
+                <th className="py-1 text-right">Rate</th>
+                <th className="py-1 text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {externalServices.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-1 italic text-gray-500">No specialized external sublet services.</td>
+                </tr>
+              ) : (
+                externalServices.map((s: any) => (
+                  <tr key={s.id} className="border-b border-gray-100">
+                    <td className="py-1">
+                      {s.service_name} {s.vendor_name ? `(${s.vendor_name})` : ''} {s.is_extra_work ? '(Supplementary Work)' : ''}
+                    </td>
+                    <td className="py-1 text-center">{formatQuantity(s.hours_qty)}</td>
+                    <td className="py-1 text-right">{formatCurrency(s.unit_price)}</td>
+                    <td className="py-1 text-right">{formatCurrency(s.total_price)}</td>
+                  </tr>
+                ))
+              )}
+              <tr className="font-bold">
+                <td colSpan={3} className="text-right py-2">External Sublet Subtotal:</td>
+                <td className="text-right py-2">{formatCurrency(totalExternal)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Section 3: Spare Parts */}
+        <div className="mb-6">
+          <h4 className="font-bold text-xs uppercase border-b border-black pb-1 mb-2">3. Required Spare Parts & Materials</h4>
           <table className="w-full text-xs text-left">
             <thead>
               <tr className="border-b border-gray-400">
@@ -2705,16 +3363,22 @@ const JobCardDetails: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {spareParts.map((p: any) => (
-                <tr key={p.id} className="border-b border-gray-100">
-                  <td className="py-1">
-                    {p.part_name} {p.is_extra_work ? '(Supplementary)' : ''}
-                  </td>
-                  <td className="py-1 text-center">{formatQuantity(p.quantity)} {p.unit || 'pcs'}</td>
-                  <td className="py-1 text-right">{formatCurrency(p.unit_price)}</td>
-                  <td className="py-1 text-right">{formatCurrency(p.total_price)}</td>
+              {spareParts.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-1 italic text-gray-500">No spare parts recorded.</td>
                 </tr>
-              ))}
+              ) : (
+                spareParts.map((p: any) => (
+                  <tr key={p.id} className="border-b border-gray-100">
+                    <td className="py-1">
+                      {p.part_name} {p.is_extra_work ? '(Supplementary Material)' : ''}
+                    </td>
+                    <td className="py-1 text-center">{formatQuantity(p.quantity)} {p.unit || 'pcs'}</td>
+                    <td className="py-1 text-right">{formatCurrency(p.unit_price)}</td>
+                    <td className="py-1 text-right">{formatCurrency(p.total_price)}</td>
+                  </tr>
+                ))
+              )}
               <tr className="font-bold">
                 <td colSpan={3} className="text-right py-2">Parts Subtotal:</td>
                 <td className="text-right py-2">{formatCurrency(totalParts)}</td>
@@ -2725,13 +3389,17 @@ const JobCardDetails: React.FC = () => {
 
         {/* Totals */}
         <div className="border-t-2 border-black pt-4 mb-10 flex justify-end">
-          <div className="w-64 text-xs space-y-1 text-right">
+          <div className="w-72 text-xs space-y-1 text-right">
             <div className="flex justify-between">
-              <span>Estimated Labor:</span>
+              <span>Workshop Labor:</span>
               <span>{formatCurrency(totalLabor)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Estimated Parts:</span>
+              <span>External Sublet Services:</span>
+              <span>{formatCurrency(totalExternal)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Spare Parts & Materials:</span>
               <span>{formatCurrency(totalParts)}</span>
             </div>
             <div className="flex justify-between text-sm font-bold border-t border-black pt-1">

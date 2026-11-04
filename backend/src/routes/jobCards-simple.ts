@@ -295,14 +295,30 @@ router.post('/', async (req: AuthRequest, res) => {
         }
         const sPrimaryTechId = sTechIds.length > 0 ? sTechIds[0] : null;
 
+        let initServiceType = s.serviceType || s.service_type || 'LABOR';
+        let initVendor = s.vendorName || s.vendor_name || null;
+        let initCost = Number(s.costPrice || s.cost_price || 0);
+
+        if (s.serviceId) {
+          const sRes = await query('SELECT service_type, default_vendor, default_cost FROM services WHERE id = $1', [s.serviceId]);
+          if (sRes.rows.length > 0) {
+            if (!s.serviceType && sRes.rows[0].service_type) initServiceType = sRes.rows[0].service_type;
+            if (!s.vendorName && sRes.rows[0].default_vendor) initVendor = sRes.rows[0].default_vendor;
+            if (!s.costPrice && sRes.rows[0].default_cost) initCost = Number(sRes.rows[0].default_cost);
+          }
+        }
+
         await query(`
           INSERT INTO job_card_services (
-            job_card_id, service_id, service_name, description, hours_qty, unit_price, total_price, is_extra_work, technician_id, technician_ids
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8, $9)
+            job_card_id, service_id, service_name, service_type, vendor_name, cost_price, description, hours_qty, unit_price, total_price, is_extra_work, technician_id, technician_ids
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, $11, $12)
         `, [
           createdJobCard.id,
           s.serviceId || null,
           s.serviceName || s.name || 'Workshop Service',
+          initServiceType,
+          initVendor,
+          initCost,
           s.description || '',
           qty,
           price,
@@ -443,6 +459,9 @@ router.post('/:id/services', async (req: AuthRequest, res) => {
     const {
       serviceId,
       serviceName,
+      serviceType = 'LABOR',
+      vendorName = null,
+      costPrice = 0,
       description = '',
       hoursQty = 1,
       unitPrice = 0,
@@ -465,20 +484,32 @@ router.post('/:id/services', async (req: AuthRequest, res) => {
     const primaryTechId = effectiveTechIds.length > 0 ? effectiveTechIds[0] : null;
 
     let finalServiceName = serviceName;
-    if (!finalServiceName && serviceId) {
-      const sResult = await query('SELECT name FROM services WHERE id = $1', [serviceId]);
-      finalServiceName = sResult.rows[0]?.name || 'Labor Service';
+    let finalServiceType = serviceType || 'LABOR';
+    let finalVendorName = vendorName || null;
+    let finalCostPrice = Number(costPrice) || 0;
+
+    if (serviceId) {
+      const sResult = await query('SELECT name, service_type, default_vendor, default_cost FROM services WHERE id = $1', [serviceId]);
+      if (sResult.rows.length > 0) {
+        if (!finalServiceName) finalServiceName = sResult.rows[0].name;
+        if (!serviceType && sResult.rows[0].service_type) finalServiceType = sResult.rows[0].service_type;
+        if (!vendorName && sResult.rows[0].default_vendor) finalVendorName = sResult.rows[0].default_vendor;
+        if (!costPrice && sResult.rows[0].default_cost) finalCostPrice = Number(sResult.rows[0].default_cost) || 0;
+      }
     }
 
     const result = await query(`
       INSERT INTO job_card_services (
-        job_card_id, service_id, service_name, description, hours_qty, unit_price, total_price, is_extra_work, technician_id, technician_ids
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        job_card_id, service_id, service_name, service_type, vendor_name, cost_price, description, hours_qty, unit_price, total_price, is_extra_work, technician_id, technician_ids
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *
     `, [
       id,
       serviceId || null,
-      finalServiceName || 'Workshop Service',
+      finalServiceName || (finalServiceType === 'EXTERNAL_SERVICE' ? 'External Sublet Service' : 'Workshop Service'),
+      finalServiceType,
+      finalVendorName,
+      finalCostPrice,
       description,
       qty,
       price,
@@ -518,6 +549,9 @@ router.put('/:id/services/:serviceId', async (req: AuthRequest, res) => {
     const { id, serviceId } = req.params;
     const {
       serviceName,
+      serviceType,
+      vendorName,
+      costPrice,
       description = '',
       hoursQty,
       unitPrice,
@@ -538,6 +572,9 @@ router.put('/:id/services/:serviceId', async (req: AuthRequest, res) => {
     const qty = hoursQty !== undefined ? (Number(hoursQty) || 1) : Number(current.hours_qty);
     const price = unitPrice !== undefined ? (Number(unitPrice) || 0) : Number(current.unit_price);
     const total = qty * price;
+    const finalServiceType = serviceType !== undefined ? serviceType : (current.service_type || 'LABOR');
+    const finalVendorName = vendorName !== undefined ? vendorName : current.vendor_name;
+    const finalCostPrice = costPrice !== undefined ? Number(costPrice) : current.cost_price;
 
     let effectiveTechIds: string[] = [];
     if (Array.isArray(technicianIds)) {
@@ -555,18 +592,24 @@ router.put('/:id/services/:serviceId', async (req: AuthRequest, res) => {
     const result = await query(`
       UPDATE job_card_services SET
         service_name = COALESCE($1, service_name),
-        description = COALESCE($2, description),
-        hours_qty = $3,
-        unit_price = $4,
-        total_price = $5,
-        technician_id = $6,
-        technician_ids = $7,
-        is_extra_work = CASE WHEN $8::boolean IS NOT NULL THEN $8::boolean ELSE is_extra_work END,
+        service_type = $2,
+        vendor_name = $3,
+        cost_price = $4,
+        description = COALESCE($5, description),
+        hours_qty = $6,
+        unit_price = $7,
+        total_price = $8,
+        technician_id = $9,
+        technician_ids = $10,
+        is_extra_work = CASE WHEN $11::boolean IS NOT NULL THEN $11::boolean ELSE is_extra_work END,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $9 AND job_card_id = $10
+      WHERE id = $12 AND job_card_id = $13
       RETURNING *
     `, [
       serviceName !== undefined ? serviceName : null,
+      finalServiceType,
+      finalVendorName,
+      finalCostPrice,
       description !== undefined ? description : null,
       qty,
       price,

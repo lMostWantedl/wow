@@ -14,6 +14,9 @@ export interface CreateServiceData {
   name: string;
   description?: string;
   category?: string;
+  serviceType?: 'LABOR' | 'EXTERNAL_SERVICE';
+  defaultVendor?: string;
+  defaultCost?: number;
   price: number;
   duration: number;
 }

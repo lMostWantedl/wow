@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { servicesService } from '../services/services';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Wrench, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { SERVICE_CATEGORIES } from './CreateService';
 
@@ -11,6 +11,9 @@ interface EditServiceFormData {
   name: string;
   description: string;
   category: string;
+  serviceType: 'LABOR' | 'EXTERNAL_SERVICE';
+  defaultVendor?: string;
+  defaultCost?: number;
   basePrice: number;
   duration: number;
 }
@@ -29,15 +32,20 @@ const EditService: React.FC = () => {
     }
   );
 
-  const { register, handleSubmit, formState: { errors }, setValue } = useForm<EditServiceFormData>({
+  const { register, handleSubmit, watch, formState: { errors }, setValue } = useForm<EditServiceFormData>({
     defaultValues: {
       name: '',
       description: '',
       category: 'General',
+      serviceType: 'LABOR',
+      defaultVendor: '',
+      defaultCost: 0,
       basePrice: 0,
       duration: 60
     }
   });
+
+  const selectedServiceType = watch('serviceType');
 
   // Populate form when data is loaded
   useEffect(() => {
@@ -45,6 +53,10 @@ const EditService: React.FC = () => {
       setValue('name', data.service.name || '');
       setValue('description', data.service.description || '');
       setValue('category', data.service.category || 'General');
+      const st = data.service.service_type || (data.service as any).serviceType || 'LABOR';
+      setValue('serviceType', st);
+      setValue('defaultVendor', data.service.default_vendor || (data.service as any).defaultVendor || '');
+      setValue('defaultCost', data.service.default_cost || (data.service as any).defaultCost || 0);
       setValue('basePrice', data.service.price || 0);
       setValue('duration', data.service.duration || 0);
     }
@@ -55,6 +67,9 @@ const EditService: React.FC = () => {
       name: formData.name,
       description: formData.description,
       category: formData.category || 'General',
+      serviceType: formData.serviceType,
+      defaultVendor: formData.serviceType === 'EXTERNAL_SERVICE' ? (formData.defaultVendor || undefined) : undefined,
+      defaultCost: formData.serviceType === 'EXTERNAL_SERVICE' ? (Number(formData.defaultCost) || 0) : undefined,
       price: formData.basePrice,
       duration: formData.duration
     }),
@@ -123,6 +138,54 @@ const EditService: React.FC = () => {
 
       <div className="card p-6 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800 rounded-xl shadow-xs">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          {/* Service Classification Type */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+              Service Classification & Department *
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setValue('serviceType', 'LABOR')}
+                className={`p-3 rounded-xl border text-left flex items-start gap-3 transition-all ${
+                  selectedServiceType === 'LABOR'
+                    ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-500 ring-1 ring-blue-500'
+                    : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 hover:border-slate-300'
+                }`}
+              >
+                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 mt-0.5">
+                  <Wrench className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="font-bold text-xs text-gray-900 dark:text-slate-100">In-House Workshop Labor</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Operations performed by garage mechanics & technicians inside workshop bays.
+                  </p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setValue('serviceType', 'EXTERNAL_SERVICE')}
+                className={`p-3 rounded-xl border text-left flex items-start gap-3 transition-all ${
+                  selectedServiceType === 'EXTERNAL_SERVICE'
+                    ? 'bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-500 ring-1 ring-indigo-500'
+                    : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 hover:border-slate-300'
+                }`}
+              >
+                <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 mt-0.5">
+                  <ExternalLink className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="font-bold text-xs text-indigo-700 dark:text-indigo-300">Specialized & External Sublet</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Jobs sent to specialist labs (injector testing, turbo overhaul, lathe disc skimming).
+                  </p>
+                </div>
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
@@ -132,7 +195,7 @@ const EditService: React.FC = () => {
                 type="text"
                 className="input w-full text-xs"
                 {...register('name', { required: 'Service name is required' })}
-                placeholder="Enter service name"
+                placeholder={selectedServiceType === 'EXTERNAL_SERVICE' ? 'e.g. Diesel Fuel Injector Calibration' : 'e.g. Front Brake Pads Replacement'}
               />
               {errors.name && (
                 <p className="text-red-600 text-xs mt-1">{errors.name.message}</p>
@@ -153,6 +216,36 @@ const EditService: React.FC = () => {
               </select>
             </div>
           </div>
+
+          {selectedServiceType === 'EXTERNAL_SERVICE' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 rounded-xl bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-200/60 dark:border-indigo-900/40">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                  Default Sublet Vendor / Lab Name
+                </label>
+                <input
+                  type="text"
+                  className="input w-full text-xs"
+                  {...register('defaultVendor')}
+                  placeholder="e.g. Bosch Diesel Calibration Center"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                  Default Sublet Procurement Cost (₹)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="input w-full text-xs font-mono"
+                  {...register('defaultCost')}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">

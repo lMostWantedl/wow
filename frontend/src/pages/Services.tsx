@@ -14,6 +14,7 @@ import {
   List,
   Layers,
   X,
+  ExternalLink,
   Tag
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -287,6 +288,16 @@ const Services: React.FC = () => {
                           <h4 className="text-sm font-bold text-gray-900 dark:text-slate-100">
                             {service.name}
                           </h4>
+                          {(service.service_type === 'EXTERNAL_SERVICE' || (service as any).serviceType === 'EXTERNAL_SERVICE') ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                              <ExternalLink className="h-2.5 w-2.5" />
+                              External Sublet
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                              In-House Labor
+                            </span>
+                          )}
                           <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
                             <Clock className="h-3 w-3" />
                             {service.duration || 60} mins
@@ -295,6 +306,11 @@ const Services: React.FC = () => {
                         {service.description && (
                           <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
                             {service.description}
+                          </p>
+                        )}
+                        {(service.default_vendor || (service as any).defaultVendor) && (
+                          <p className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
+                            Sublet Provider: {service.default_vendor || (service as any).defaultVendor}
                           </p>
                         )}
                       </div>
@@ -355,8 +371,20 @@ const Services: React.FC = () => {
                   const style = getCategoryStyle(service.category);
                   return (
                     <tr key={service.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/40 transition-colors">
-                      <td className="py-3 px-4 font-bold text-gray-900 dark:text-slate-100">
-                        {service.name}
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-gray-900 dark:text-slate-100 flex items-center gap-1.5 flex-wrap">
+                          <span>{service.name}</span>
+                          {(service.service_type === 'EXTERNAL_SERVICE' || (service as any).serviceType === 'EXTERNAL_SERVICE') && (
+                            <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.2 rounded-full font-bold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                              Sublet
+                            </span>
+                          )}
+                        </div>
+                        {(service.default_vendor || (service as any).defaultVendor) && (
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            Vendor: {service.default_vendor || (service as any).defaultVendor}
+                          </p>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${style.bg} ${style.text} ${style.border}`}>

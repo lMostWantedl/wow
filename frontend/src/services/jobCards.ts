@@ -37,6 +37,9 @@ export const jobCardsService = {
   addService: async (id: string, data: {
     serviceId?: string;
     serviceName?: string;
+    serviceType?: 'LABOR' | 'EXTERNAL_SERVICE';
+    vendorName?: string;
+    costPrice?: number;
     description?: string;
     hoursQty?: number;
     unitPrice?: number;
@@ -50,6 +53,9 @@ export const jobCardsService = {
 
   updateService: async (id: string, serviceId: string, data: {
     serviceName?: string;
+    serviceType?: 'LABOR' | 'EXTERNAL_SERVICE';
+    vendorName?: string;
+    costPrice?: number;
     description?: string;
     hoursQty?: number;
     unitPrice?: number;

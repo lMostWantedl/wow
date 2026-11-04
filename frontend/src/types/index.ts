@@ -77,6 +77,12 @@ export interface Service {
   name: string;
   description?: string;
   category?: string;
+  service_type?: 'LABOR' | 'EXTERNAL_SERVICE';
+  serviceType?: 'LABOR' | 'EXTERNAL_SERVICE';
+  default_vendor?: string;
+  defaultVendor?: string;
+  default_cost?: number;
+  defaultCost?: number;
   price: number;
   duration: number;
   isActive: boolean;
@@ -504,6 +510,9 @@ export interface JobCardService {
   job_card_id: string;
   service_id?: string;
   service_name: string;
+  service_type?: 'LABOR' | 'EXTERNAL_SERVICE';
+  vendor_name?: string;
+  cost_price?: number;
   description?: string;
   hours_qty: number;
   unit_price: number;

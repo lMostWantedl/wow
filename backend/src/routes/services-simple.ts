@@ -10,9 +10,15 @@ const createServiceSchema = Joi.object({
   name: Joi.string().required(),
   description: Joi.string().allow('', null).optional(),
   category: Joi.string().allow('', null).default('General'),
+  serviceType: Joi.string().valid('LABOR', 'EXTERNAL_SERVICE').default('LABOR'),
+  service_type: Joi.string().valid('LABOR', 'EXTERNAL_SERVICE').optional(),
+  defaultVendor: Joi.string().allow('', null).optional(),
+  default_vendor: Joi.string().allow('', null).optional(),
+  defaultCost: Joi.number().min(0).default(0),
+  default_cost: Joi.number().min(0).optional(),
   price: Joi.number().min(0).required(),
   duration: Joi.number().min(1).default(60)
-});
+}).unknown(true);
 
 export const DEFAULT_AUTOMOTIVE_SERVICES = [
   // Periodic & Maintenance
@@ -122,7 +128,15 @@ router.get('/', async (req: AuthRequest, res) => {
 
     const { category, search, page, limit } = req.query;
 
-    let queryText = `SELECT id, name, description, COALESCE(category, 'General') as category, base_price as price, duration, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt" FROM services WHERE is_active = true`;
+    let queryText = `SELECT id, name, description, COALESCE(category, 'General') as category,
+                            COALESCE(service_type, 'LABOR') as "serviceType",
+                            COALESCE(service_type, 'LABOR') as service_type,
+                            default_vendor as "defaultVendor",
+                            default_vendor,
+                            COALESCE(default_cost, 0) as "defaultCost",
+                            COALESCE(default_cost, 0) as default_cost,
+                            base_price as price, duration, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt"
+                     FROM services WHERE is_active = true`;
     let countQueryText = `SELECT COUNT(*) as total FROM services WHERE is_active = true`;
     let params: any[] = [];
     let countParams: any[] = [];
@@ -190,7 +204,15 @@ router.get('/:id', async (req: AuthRequest, res) => {
     const { id } = req.params;
 
     const result = await query(
-      `SELECT id, name, description, COALESCE(category, 'General') as category, base_price as price, duration, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt" FROM services WHERE id = $1 AND is_active = true`,
+      `SELECT id, name, description, COALESCE(category, 'General') as category,
+              COALESCE(service_type, 'LABOR') as "serviceType",
+              COALESCE(service_type, 'LABOR') as service_type,
+              default_vendor as "defaultVendor",
+              default_vendor,
+              COALESCE(default_cost, 0) as "defaultCost",
+              COALESCE(default_cost, 0) as default_cost,
+              base_price as price, duration, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt"
+       FROM services WHERE id = $1 AND is_active = true`,
       [id]
     );
 
@@ -214,6 +236,9 @@ router.post('/', requireRoleOrScope(['TECHNICIAN', 'MANAGER'], 'services'), asyn
     }
 
     const { name, description, category, price, duration } = value;
+    const finalServiceType = value.serviceType || value.service_type || 'LABOR';
+    const finalVendor = value.defaultVendor || value.default_vendor || null;
+    const finalCost = value.defaultCost ?? value.default_cost ?? 0;
 
     // Check if service already exists
     const existingService = await query(
@@ -227,10 +252,17 @@ router.post('/', requireRoleOrScope(['TECHNICIAN', 'MANAGER'], 'services'), asyn
 
     // Create service
     const result = await query(
-      `INSERT INTO services (name, description, category, base_price, duration)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, name, description, category, base_price as price, duration, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt"`,
-      [name, description || null, category || 'General', price, duration || 60]
+      `INSERT INTO services (name, description, category, service_type, default_vendor, default_cost, base_price, duration)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, name, description, category,
+                 COALESCE(service_type, 'LABOR') as "serviceType",
+                 COALESCE(service_type, 'LABOR') as service_type,
+                 default_vendor as "defaultVendor",
+                 default_vendor,
+                 COALESCE(default_cost, 0) as "defaultCost",
+                 COALESCE(default_cost, 0) as default_cost,
+                 base_price as price, duration, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt"`,
+      [name, description || null, category || 'General', finalServiceType, finalVendor, finalCost, price, duration || 60]
     );
 
     res.status(201).json({ service: result.rows[0] });
@@ -252,7 +284,7 @@ router.put('/:id', requireRoleOrScope(['TECHNICIAN', 'MANAGER'], 'services'), as
     const { name, description, category, price, duration } = value;
 
     // Check if service exists
-    const existingService = await query('SELECT id FROM services WHERE id = $1', [id]);
+    const existingService = await query('SELECT * FROM services WHERE id = $1', [id]);
     if (existingService.rows.length === 0) {
       return res.status(404).json({ message: 'Service not found' });
     }
@@ -263,13 +295,24 @@ router.put('/:id', requireRoleOrScope(['TECHNICIAN', 'MANAGER'], 'services'), as
       return res.status(400).json({ message: 'Another service with this name already exists' });
     }
 
+    const finalServiceType = value.serviceType || value.service_type || existingService.rows[0].service_type || 'LABOR';
+    const finalVendor = value.defaultVendor !== undefined ? value.defaultVendor : (value.default_vendor !== undefined ? value.default_vendor : existingService.rows[0].default_vendor);
+    const finalCost = value.defaultCost !== undefined ? value.defaultCost : (value.default_cost !== undefined ? value.default_cost : existingService.rows[0].default_cost);
+
     // Update service
     const result = await query(
       `UPDATE services 
-       SET name = $1, description = $2, category = $3, base_price = $4, duration = $5, updated_at = CURRENT_TIMESTAMP 
-       WHERE id = $6 
-       RETURNING id, name, description, category, base_price as price, duration, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt"`,
-      [name, description || null, category || 'General', price, duration || 60, id]
+       SET name = $1, description = $2, category = $3, service_type = $4, default_vendor = $5, default_cost = $6, base_price = $7, duration = $8, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $9 
+       RETURNING id, name, description, category,
+                 COALESCE(service_type, 'LABOR') as "serviceType",
+                 COALESCE(service_type, 'LABOR') as service_type,
+                 default_vendor as "defaultVendor",
+                 default_vendor,
+                 COALESCE(default_cost, 0) as "defaultCost",
+                 COALESCE(default_cost, 0) as default_cost,
+                 base_price as price, duration, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt"`,
+      [name, description || null, category || 'General', finalServiceType, finalVendor, finalCost, price, duration || 60, id]
     );
 
     res.json({ service: result.rows[0] });
