@@ -22,7 +22,7 @@ export const generateExpenseNumber = async (): Promise<string> => {
 // ============================================================================
 // 1. COMPREHENSIVE FINANCIAL OVERVIEW REPORT
 // ============================================================================
-router.get('/report', requireRoleOrScope(['MANAGER'], 'financial'), async (req: AuthRequest, res) => {
+router.get('/report', requireRoleOrScope(['MANAGER'], ['financial', 'view_customer_retail', 'view_garage_cost']), async (req: AuthRequest, res) => {
   try {
     const { period = 'month', startDate: customStart, endDate: customEnd } = req.query;
 
@@ -230,6 +230,33 @@ router.get('/report', requireRoleOrScope(['MANAGER'], 'financial'), async (req: 
     const totalCapex = parseFloat(capexResult.rows[0].total_capex) || 0;
     const allTimeCapex = parseFloat(allTimeCapexResult.rows[0].all_time_capex) || 0;
 
+    // Sublet Services Revenue & Garage Cost
+    const subletRevResult = await query(
+      `SELECT COALESCE(SUM(jcs.total_price), 0) as sublet_revenue
+       FROM job_card_services jcs
+       JOIN job_cards jc ON jcs.job_card_id = jc.id
+       WHERE jcs.service_type = 'EXTERNAL_SERVICE' AND jc.created_at >= $1 AND jc.created_at <= $2`,
+      [startDate, endDate]
+    );
+    const subletRevenue = parseFloat(subletRevResult.rows[0]?.sublet_revenue || '0');
+
+    const subletCostResult = await query(
+      `SELECT COALESCE(SUM(amount), 0) as sublet_cost
+       FROM garage_expenses
+       WHERE category = 'SUBLET_SERVICES' AND expense_date >= $1 AND expense_date <= $2`,
+      [startDate, endDate]
+    );
+    const subletCost = parseFloat(subletCostResult.rows[0]?.sublet_cost || '0');
+
+    const partsProcuredResult = await query(
+      `SELECT COALESCE(SUM(amount), 0) as parts_procured
+       FROM garage_expenses
+       WHERE category = 'PARTS_PROCUREMENT' AND expense_date >= $1 AND expense_date <= $2`,
+      [startDate, endDate]
+    );
+    const partsProcuredCost = parseFloat(partsProcuredResult.rows[0]?.parts_procured || '0');
+    const totalPartsCost = totalCogs + partsProcuredCost;
+
     // True Net Operating Profit = Gross Profit - Operating Expenses
     const netProfit = grossProfit - totalOpex;
     const netProfitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
@@ -280,7 +307,20 @@ router.get('/report', requireRoleOrScope(['MANAGER'], 'financial'), async (req: 
         netProfitMargin,
         totalBills: parseInt(revenueResult.rows[0].bill_count, 10) || 0,
         paidRevenue: parseFloat(revenueResult.rows[0].paid_revenue) || 0,
-        pendingPayments: parseFloat(pendingResult.rows[0].pending_amount) || 0
+        pendingPayments: parseFloat(pendingResult.rows[0].pending_amount) || 0,
+        retailVsCost: {
+          partsRetail: partsRevenue,
+          partsCost: totalPartsCost,
+          partsMargin: partsRevenue - totalPartsCost,
+          partsMarginPct: partsRevenue > 0 ? ((partsRevenue - totalPartsCost) / partsRevenue) * 100 : 0,
+          subletRetail: subletRevenue,
+          subletCost: subletCost,
+          subletMargin: subletRevenue - subletCost,
+          subletMarginPct: subletRevenue > 0 ? ((subletRevenue - subletCost) / subletRevenue) * 100 : 0,
+          laborRetail: laborRevenue,
+          totalCustomerRetail: totalRevenue,
+          totalGarageCost: totalPartsCost + subletCost + totalOpex,
+        }
       },
       expenseCategories: categoryExpensesResult.rows.map(r => ({
         category: r.category,
@@ -310,7 +350,7 @@ router.get('/report', requireRoleOrScope(['MANAGER'], 'financial'), async (req: 
 // ============================================================================
 // 2. PROFIT AND LOSS DETAILED BREAKDOWN
 // ============================================================================
-router.get('/profit-loss', requireRoleOrScope(['MANAGER'], 'financial'), async (req: AuthRequest, res) => {
+router.get('/profit-loss', requireRoleOrScope(['MANAGER'], ['financial', 'view_customer_retail', 'view_garage_cost']), async (req: AuthRequest, res) => {
   try {
     const { startDate, endDate } = req.query;
 
@@ -421,7 +461,7 @@ router.get('/profit-loss', requireRoleOrScope(['MANAGER'], 'financial'), async (
 // ============================================================================
 // 3. DAILY FINANCIAL SUMMARY
 // ============================================================================
-router.get('/daily', requireRoleOrScope(['MANAGER'], 'financial'), async (req: AuthRequest, res) => {
+router.get('/daily', requireRoleOrScope(['MANAGER'], ['financial', 'view_customer_retail', 'view_garage_cost']), async (req: AuthRequest, res) => {
   try {
     const { date } = req.query;
     const targetDate = date ? new Date(date as string) : new Date();
@@ -460,7 +500,7 @@ router.get('/daily', requireRoleOrScope(['MANAGER'], 'financial'), async (req: A
 // ============================================================================
 // 4. GARAGE EXPENSES LIST (WITH SEARCH, CATEGORY, TYPE & DATE FILTERS)
 // ============================================================================
-router.get('/expenses', requireRoleOrScope(['MANAGER'], 'financial'), async (req: AuthRequest, res) => {
+router.get('/expenses', requireRoleOrScope(['MANAGER'], ['financial', 'view_customer_retail', 'view_garage_cost']), async (req: AuthRequest, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.max(1, Math.min(100, parseInt(req.query.limit as string) || 15));
@@ -475,9 +515,15 @@ router.get('/expenses', requireRoleOrScope(['MANAGER'], 'financial'), async (req
     } = req.query;
 
     let queryText = `
-      SELECT ge.*, u.name as staff_name, u.role as staff_role
+      SELECT ge.*, u.name as staff_name, u.role as staff_role,
+        COALESCE(jcsp.total_price, jcs.total_price) as customer_retail_price,
+        COALESCE(jc1.job_card_number, jc2.job_card_number) as linked_job_card_number
       FROM garage_expenses ge
       LEFT JOIN users u ON ge.user_id = u.id
+      LEFT JOIN job_card_spare_parts jcsp ON jcsp.procurement_expense_id = ge.id
+      LEFT JOIN job_cards jc1 ON jcsp.job_card_id = jc1.id
+      LEFT JOIN job_card_services jcs ON jcs.procurement_expense_id = ge.id
+      LEFT JOIN job_cards jc2 ON jcs.job_card_id = jc2.id
       WHERE 1=1
     `;
     const queryParams: any[] = [];
@@ -708,7 +754,7 @@ router.delete('/expenses/:id', requireRoleOrScope(['MANAGER'], 'financial'), asy
 // ============================================================================
 // 8. STAFF SALARIES & PAYROLL SUMMARY
 // ============================================================================
-router.get('/salaries', requireRoleOrScope(['MANAGER'], 'financial'), async (req: AuthRequest, res) => {
+router.get('/salaries', requireRoleOrScope(['MANAGER'], ['financial', 'view_garage_cost']), async (req: AuthRequest, res) => {
   try {
     const { year = new Date().getFullYear() } = req.query;
 
@@ -787,7 +833,7 @@ router.put('/staff-salary/:userId', requireRoleOrScope(['MANAGER'], 'financial')
 // ============================================================================
 
 // Get all investments & capital summary
-router.get('/investments', requireRoleOrScope(['MANAGER'], 'financial'), async (req: AuthRequest, res) => {
+router.get('/investments', requireRoleOrScope(['MANAGER'], ['financial', 'view_customer_retail', 'view_garage_cost']), async (req: AuthRequest, res) => {
   try {
     const result = await query(`
       SELECT 

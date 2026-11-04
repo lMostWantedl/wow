@@ -55,6 +55,18 @@ export const AVAILABLE_SCOPES: ScopeDefinition[] = [
     category: 'management'
   },
   {
+    id: 'view_customer_retail',
+    name: 'View Customer Retail Pricing',
+    description: 'Access customer-facing retail prices, billed subtotals, and invoice revenue across job cards and financial sections',
+    category: 'operations'
+  },
+  {
+    id: 'view_garage_cost',
+    name: 'View Garage Wholesale & Procurement Costs',
+    description: 'Access internal garage wholesale purchase costs, supplier procurement outflows, sublet lab expenses, and profit margins',
+    category: 'management'
+  },
+  {
     id: 'users',
     name: 'User Management',
     description: 'Create staff accounts, configure roles, and assign access scopes',
@@ -63,8 +75,8 @@ export const AVAILABLE_SCOPES: ScopeDefinition[] = [
 ];
 
 export const ROLE_DEFAULT_SCOPES: Record<string, string[]> = {
-  MANAGER: ['dashboard', 'job_cards', 'bills', 'customers', 'spare_parts', 'services', 'financial', 'users'],
-  TECHNICIAN: ['dashboard', 'job_cards', 'assignable_technician', 'bills', 'customers', 'spare_parts', 'services'],
+  MANAGER: ['dashboard', 'job_cards', 'bills', 'customers', 'spare_parts', 'services', 'financial', 'view_customer_retail', 'view_garage_cost', 'users'],
+  TECHNICIAN: ['dashboard', 'job_cards', 'assignable_technician', 'bills', 'customers', 'spare_parts', 'services', 'view_customer_retail'],
   CUSTOMER: ['bills']
 };
 
@@ -72,26 +84,26 @@ export const SCOPE_PRESETS = [
   {
     id: 'all',
     label: 'All Scopes',
-    scopes: ['dashboard', 'job_cards', 'assignable_technician', 'bills', 'customers', 'spare_parts', 'services', 'financial', 'users']
+    scopes: ['dashboard', 'job_cards', 'assignable_technician', 'bills', 'customers', 'spare_parts', 'services', 'financial', 'view_customer_retail', 'view_garage_cost', 'users']
   },
   {
     id: 'working_manager',
     label: 'Working Manager',
-    scopes: ['dashboard', 'job_cards', 'assignable_technician', 'bills', 'customers', 'spare_parts', 'services', 'financial', 'users']
+    scopes: ['dashboard', 'job_cards', 'assignable_technician', 'bills', 'customers', 'spare_parts', 'services', 'financial', 'view_customer_retail', 'view_garage_cost', 'users']
   },
   {
     id: 'technician',
     label: 'Technician Default',
-    scopes: ['dashboard', 'job_cards', 'assignable_technician', 'bills', 'customers', 'spare_parts', 'services']
+    scopes: ['dashboard', 'job_cards', 'assignable_technician', 'bills', 'customers', 'spare_parts', 'services', 'view_customer_retail']
   },
   {
     id: 'billing',
     label: 'Front Desk / Billing',
-    scopes: ['bills', 'job_cards', 'customers']
+    scopes: ['bills', 'job_cards', 'customers', 'view_customer_retail']
   },
   {
     id: 'inventory',
     label: 'Inventory & Parts',
-    scopes: ['spare_parts', 'services']
+    scopes: ['spare_parts', 'services', 'view_garage_cost']
   }
 ];

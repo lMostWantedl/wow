@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 interface RoleBasedRouteProps {
   children: React.ReactNode;
   allowedRoles?: string[];
-  requiredScope?: string;
+  requiredScope?: string | string[];
   fallbackPath?: string;
 }
 
@@ -32,16 +32,19 @@ const RoleBasedRoute: React.FC<RoleBasedRouteProps> = ({
   // If user has specific scope granted
   let hasRequiredScope = true;
   if (requiredScope) {
+    const userScopes: string[] = user.scopes || [];
     if (isManager) {
       hasRequiredScope = true;
+    } else if (Array.isArray(requiredScope)) {
+      hasRequiredScope = requiredScope.some(s => userScopes.includes(s));
     } else if (requiredScope === 'job_cards' && isTechnician) {
       hasRequiredScope = true;
-    } else if (user.scopes && user.scopes.length > 0) {
-      hasRequiredScope = user.scopes.includes(requiredScope);
+    } else if (userScopes.length > 0) {
+      hasRequiredScope = userScopes.includes(requiredScope);
     } else {
       // Fallback defaults
       if (isTechnician) {
-        hasRequiredScope = ['dashboard', 'job_cards', 'bills', 'customers', 'spare_parts', 'services'].includes(requiredScope);
+        hasRequiredScope = ['dashboard', 'job_cards', 'bills', 'customers', 'spare_parts', 'services', 'view_customer_retail'].includes(requiredScope);
       } else if (user.role === 'CUSTOMER') {
         hasRequiredScope = requiredScope === 'bills';
       } else {

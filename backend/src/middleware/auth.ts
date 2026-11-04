@@ -101,7 +101,7 @@ export const requireScope = (scope: string) => {
   };
 };
 
-export const requireRoleOrScope = (roles: string[], scope?: string) => {
+export const requireRoleOrScope = (roles: string[], scope?: string | string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ message: 'Authentication required' });
@@ -111,8 +111,14 @@ export const requireRoleOrScope = (roles: string[], scope?: string) => {
       return next();
     }
 
-    if (scope && req.user.scopes && req.user.scopes.includes(scope)) {
-      return next();
+    if (scope && req.user.scopes && req.user.scopes.length > 0) {
+      if (Array.isArray(scope)) {
+        if (scope.some(s => req.user!.scopes.includes(s))) {
+          return next();
+        }
+      } else if (req.user.scopes.includes(scope)) {
+        return next();
+      }
     }
 
     return res.status(403).json({ message: 'Insufficient permissions' });

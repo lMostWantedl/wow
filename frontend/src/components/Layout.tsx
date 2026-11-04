@@ -62,7 +62,7 @@ const Layout: React.FC = () => {
     if (hasScope('services')) {
       items.push({ name: 'Services', href: '/services', icon: Wrench });
     }
-    if (hasScope('financial')) {
+    if (hasScope('financial') || hasScope('view_customer_retail') || hasScope('view_garage_cost')) {
       items.push({ name: 'Financial', href: '/financial', icon: DollarSign });
     }
     if (hasScope('users')) {

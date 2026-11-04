@@ -151,7 +151,7 @@ function App() {
             </RoleBasedRoute>
           } />
           <Route path="financial" element={
-            <RoleBasedRoute allowedRoles={['MANAGER']} requiredScope="financial">
+            <RoleBasedRoute allowedRoles={['MANAGER', 'TECHNICIAN']} requiredScope={['financial', 'view_customer_retail', 'view_garage_cost']}>
               <Financial />
             </RoleBasedRoute>
           } />

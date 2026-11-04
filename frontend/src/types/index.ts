@@ -321,6 +321,8 @@ export interface GarageExpense {
   staff_role?: string;
   invoice_reference?: string;
   notes?: string;
+  customer_retail_price?: number;
+  linked_job_card_number?: string;
   is_recurring: boolean;
   recurring_frequency?: string;
   created_by?: string;
@@ -424,6 +426,19 @@ export interface FinancialReport {
     totalBills: number;
     paidRevenue?: number;
     pendingPayments: number;
+    retailVsCost?: {
+      partsRetail: number;
+      partsCost: number;
+      partsMargin: number;
+      partsMarginPct: number;
+      subletRetail: number;
+      subletCost: number;
+      subletMargin: number;
+      subletMarginPct: number;
+      laborRetail: number;
+      totalCustomerRetail: number;
+      totalGarageCost: number;
+    };
   };
   billsByStatus: Array<{
     status: string;
