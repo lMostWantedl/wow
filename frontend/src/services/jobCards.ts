@@ -53,6 +53,7 @@ export const jobCardsService = {
     description?: string;
     hoursQty?: number;
     unitPrice?: number;
+    isExtraWork?: boolean;
     technicianId?: string;
     technicianIds?: string[];
   }): Promise<any> => {
@@ -86,6 +87,7 @@ export const jobCardsService = {
     quantity?: number;
     unit?: string;
     unitPrice?: number;
+    isExtraWork?: boolean;
   }): Promise<any> => {
     const response = await api.put(`/job-cards/${id}/spare-parts/${partId}`, data);
     return response.data;

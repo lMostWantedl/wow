@@ -20,9 +20,20 @@ const recalculateJobCardTotals = async (jobCardId: string) => {
   const partsTotal = parseFloat(partsResult.rows[0]?.total || '0');
   const actualAmount = servicesTotal + partsTotal;
 
+  // Calculate estimated amount (items that are part of Initial Quotation, is_extra_work = false)
+  const estServicesResult = await query(
+    'SELECT COALESCE(SUM(total_price), 0) as total FROM job_card_services WHERE job_card_id = $1 AND (is_extra_work = false OR is_extra_work IS NULL)',
+    [jobCardId]
+  );
+  const estPartsResult = await query(
+    'SELECT COALESCE(SUM(total_price), 0) as total FROM job_card_spare_parts WHERE job_card_id = $1 AND (is_extra_work = false OR is_extra_work IS NULL)',
+    [jobCardId]
+  );
+  const estimatedAmount = parseFloat(estServicesResult.rows[0]?.total || '0') + parseFloat(estPartsResult.rows[0]?.total || '0');
+
   await query(
-    'UPDATE job_cards SET actual_amount = $1 WHERE id = $2',
-    [actualAmount, jobCardId]
+    'UPDATE job_cards SET actual_amount = $1, estimated_amount = $2 WHERE id = $3',
+    [actualAmount, estimatedAmount, jobCardId]
   );
 
   return actualAmount;
@@ -421,7 +432,7 @@ router.put('/:id', async (req: AuthRequest, res) => {
   }
 });
 
-// POST /api/job-cards/:id/services - Add service / extra work to job card
+// POST /api/job-cards/:id/services - Add service to job card (Initial Quotation or Extra Work)
 router.post('/:id/services', async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
@@ -431,7 +442,7 @@ router.post('/:id/services', async (req: AuthRequest, res) => {
       description = '',
       hoursQty = 1,
       unitPrice = 0,
-      isExtraWork = true,
+      isExtraWork = false,
       technicianId,
       technicianIds
     } = req.body;
@@ -439,6 +450,7 @@ router.post('/:id/services', async (req: AuthRequest, res) => {
     const qty = Number(hoursQty) || 1;
     const price = Number(unitPrice) || 0;
     const total = qty * price;
+    const finalIsExtraWork = isExtraWork !== undefined ? Boolean(isExtraWork) : false;
 
     let effectiveTechIds: string[] = [];
     if (Array.isArray(technicianIds) && technicianIds.length > 0) {
@@ -467,7 +479,7 @@ router.post('/:id/services', async (req: AuthRequest, res) => {
       qty,
       price,
       total,
-      Boolean(isExtraWork),
+      finalIsExtraWork,
       primaryTechId,
       JSON.stringify(effectiveTechIds)
     ]);
@@ -486,7 +498,7 @@ router.post('/:id/services', async (req: AuthRequest, res) => {
     const updatedActual = await recalculateJobCardTotals(id);
 
     res.status(201).json({
-      message: isExtraWork ? 'Extra work service added successfully' : 'Service added successfully',
+      message: finalIsExtraWork ? 'Extra work service added successfully' : 'Service added successfully',
       service: result.rows[0],
       totalAmount: updatedActual
     });
@@ -505,6 +517,7 @@ router.put('/:id/services/:serviceId', async (req: AuthRequest, res) => {
       description = '',
       hoursQty,
       unitPrice,
+      isExtraWork,
       technicianId,
       technicianIds
     } = req.body;
@@ -544,8 +557,9 @@ router.put('/:id/services/:serviceId', async (req: AuthRequest, res) => {
         total_price = $5,
         technician_id = $6,
         technician_ids = $7,
+        is_extra_work = CASE WHEN $8::boolean IS NOT NULL THEN $8::boolean ELSE is_extra_work END,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $8 AND job_card_id = $9
+      WHERE id = $9 AND job_card_id = $10
       RETURNING *
     `, [
       serviceName !== undefined ? serviceName : null,
@@ -555,6 +569,7 @@ router.put('/:id/services/:serviceId', async (req: AuthRequest, res) => {
       total,
       primaryTechId,
       JSON.stringify(effectiveTechIds),
+      isExtraWork !== undefined ? Boolean(isExtraWork) : null,
       serviceId,
       id
     ]);
@@ -596,10 +611,12 @@ router.delete('/:id/services/:serviceId', async (req: AuthRequest, res) => {
   }
 });
 
-// POST /api/job-cards/:id/spare-parts - Add spare part / extra part to job card
+// POST /api/job-cards/:id/spare-parts - Add spare part to job card (Initial Quotation or Extra Material)
 router.post('/:id/spare-parts', async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const {
+      id
+    } = req.params;
     const {
       sparePartId,
       partName,
@@ -608,12 +625,13 @@ router.post('/:id/spare-parts', async (req: AuthRequest, res) => {
       quantity = 1,
       unit = 'pieces',
       unitPrice = 0,
-      isExtraWork = true
+      isExtraWork = false
     } = req.body;
 
     const qty = Number(quantity) || 1;
     const price = Number(unitPrice) || 0;
     const total = qty * price;
+    const finalIsExtraWork = isExtraWork !== undefined ? Boolean(isExtraWork) : false;
 
     let finalPartName = partName;
     let finalPartNumber = partNumber;
@@ -643,13 +661,13 @@ router.post('/:id/spare-parts', async (req: AuthRequest, res) => {
       finalUnit || 'pieces',
       price,
       total,
-      Boolean(isExtraWork)
+      finalIsExtraWork
     ]);
 
     const updatedActual = await recalculateJobCardTotals(id);
 
     res.status(201).json({
-      message: isExtraWork ? 'Extra spare part added successfully' : 'Spare part added successfully',
+      message: finalIsExtraWork ? 'Extra spare part added successfully' : 'Spare part added successfully',
       sparePart: result.rows[0],
       totalAmount: updatedActual
     });
@@ -669,7 +687,8 @@ router.put('/:id/spare-parts/:partId', async (req: AuthRequest, res) => {
       description = '',
       quantity,
       unit,
-      unitPrice
+      unitPrice,
+      isExtraWork
     } = req.body;
 
     const existingResult = await query(
@@ -694,8 +713,9 @@ router.put('/:id/spare-parts/:partId', async (req: AuthRequest, res) => {
         unit = COALESCE($5, unit),
         unit_price = $6,
         total_price = $7,
+        is_extra_work = CASE WHEN $8::boolean IS NOT NULL THEN $8::boolean ELSE is_extra_work END,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $8 AND job_card_id = $9
+      WHERE id = $9 AND job_card_id = $10
       RETURNING *
     `, [
       partName !== undefined ? partName : null,
@@ -705,6 +725,7 @@ router.put('/:id/spare-parts/:partId', async (req: AuthRequest, res) => {
       unit !== undefined ? unit : null,
       price,
       total,
+      isExtraWork !== undefined ? Boolean(isExtraWork) : null,
       partId,
       id
     ]);

@@ -81,6 +81,7 @@ const JobCardDetails: React.FC = () => {
   const [extraServiceDesc, setExtraServiceDesc] = useState('');
   const [extraServiceHours, setExtraServiceHours] = useState('1');
   const [extraServicePrice, setExtraServicePrice] = useState('0');
+  const [extraServiceIsExtra, setExtraServiceIsExtra] = useState(false);
   const [extraServiceTechIds, setExtraServiceTechIds] = useState<string[]>([]);
 
   const [extraPartId, setExtraPartId] = useState('');
@@ -90,6 +91,7 @@ const JobCardDetails: React.FC = () => {
   const [extraPartQty, setExtraPartQty] = useState('1');
   const [extraPartUnit, setExtraPartUnit] = useState('pieces');
   const [extraPartPrice, setExtraPartPrice] = useState('0');
+  const [extraPartIsExtra, setExtraPartIsExtra] = useState(false);
 
   // Convert to invoice states
   const [invoiceDiscount, setInvoiceDiscount] = useState('0');
@@ -284,6 +286,7 @@ const JobCardDetails: React.FC = () => {
     setExtraServiceDesc('');
     setExtraServiceHours('1');
     setExtraServicePrice('0');
+    setExtraServiceIsExtra(false);
     setExtraServiceTechIds([]);
   };
 
@@ -296,18 +299,21 @@ const JobCardDetails: React.FC = () => {
     setExtraPartQty('1');
     setExtraPartUnit('pieces');
     setExtraPartPrice('0');
+    setExtraPartIsExtra(false);
   };
 
-  const openAddServiceModal = () => {
+  const openAddServiceModal = (isExtra: boolean = false) => {
     resetServiceForm();
     resetPartForm();
+    setExtraServiceIsExtra(isExtra);
     setExtraWorkTab('service');
     setShowExtraWorkModal(true);
   };
 
-  const openAddPartModal = () => {
+  const openAddPartModal = (isExtra: boolean = false) => {
     resetServiceForm();
     resetPartForm();
+    setExtraPartIsExtra(isExtra);
     setExtraWorkTab('part');
     setShowExtraWorkModal(true);
   };
@@ -321,6 +327,7 @@ const JobCardDetails: React.FC = () => {
     setExtraServiceDesc(service.description || '');
     setExtraServiceHours(String(service.hours_qty || 1));
     setExtraServicePrice(String(service.unit_price || 0));
+    setExtraServiceIsExtra(Boolean(service.is_extra_work));
 
     let tIds: string[] = [];
     if (Array.isArray(service.technician_ids) && service.technician_ids.length > 0) {
@@ -343,6 +350,7 @@ const JobCardDetails: React.FC = () => {
     setExtraPartQty(String(part.quantity || 1));
     setExtraPartUnit(part.unit || 'pieces');
     setExtraPartPrice(String(part.unit_price || 0));
+    setExtraPartIsExtra(Boolean(part.is_extra_work));
     setShowExtraWorkModal(true);
   };
 
@@ -397,6 +405,7 @@ const JobCardDetails: React.FC = () => {
           description: extraServiceDesc,
           hoursQty: parseFloat(extraServiceHours) || 1,
           unitPrice: parseFloat(extraServicePrice) || 0,
+          isExtraWork: extraServiceIsExtra,
           technicianIds: extraServiceTechIds
         }
       });
@@ -407,7 +416,7 @@ const JobCardDetails: React.FC = () => {
         description: extraServiceDesc,
         hoursQty: parseFloat(extraServiceHours) || 1,
         unitPrice: parseFloat(extraServicePrice) || 0,
-        isExtraWork: true,
+        isExtraWork: extraServiceIsExtra,
         technicianIds: extraServiceTechIds
       });
     }
@@ -429,7 +438,8 @@ const JobCardDetails: React.FC = () => {
           description: extraPartDesc,
           quantity: parseFloat(extraPartQty) || 1,
           unit: extraPartUnit,
-          unitPrice: parseFloat(extraPartPrice) || 0
+          unitPrice: parseFloat(extraPartPrice) || 0,
+          isExtraWork: extraPartIsExtra
         }
       });
     } else {
@@ -441,7 +451,7 @@ const JobCardDetails: React.FC = () => {
         quantity: parseFloat(extraPartQty) || 1,
         unit: extraPartUnit,
         unitPrice: parseFloat(extraPartPrice) || 0,
-        isExtraWork: true
+        isExtraWork: extraPartIsExtra
       });
     }
   };
@@ -598,7 +608,7 @@ const JobCardDetails: React.FC = () => {
           {/* Add Extra Work Button */}
           {!isLocked && (
             <button
-              onClick={openAddServiceModal}
+              onClick={() => openAddServiceModal(true)}
               className="btn bg-amber-600 hover:bg-amber-700 text-white flex items-center gap-1.5 text-xs py-2 px-3 shadow-sm"
               title="Add supplementary work discovered mid-repair"
             >
@@ -901,7 +911,7 @@ const JobCardDetails: React.FC = () => {
             </span>
             {!isLocked && (
               <button
-                onClick={openAddServiceModal}
+                onClick={() => openAddServiceModal(false)}
                 className="btn btn-secondary text-xs py-1.5 px-2.5 flex items-center gap-1"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -1056,7 +1066,7 @@ const JobCardDetails: React.FC = () => {
             </span>
             {!isLocked && (
               <button
-                onClick={openAddPartModal}
+                onClick={() => openAddPartModal(false)}
                 className="btn btn-secondary text-xs py-1.5 px-2.5 flex items-center gap-1"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -1266,14 +1276,16 @@ const JobCardDetails: React.FC = () => {
                 {editingService || editingPart ? (
                   <Pencil className="h-5 w-5" />
                 ) : (
-                  <Sparkles className="h-5 w-5 text-amber-500" />
+                  <Wrench className="h-5 w-5 text-primary-500" />
                 )}
                 <h3 className="font-bold text-base text-gray-900 dark:text-slate-100">
                   {editingService
                     ? 'Edit Service / Labor'
                     : editingPart
                     ? 'Edit Spare Part / Material'
-                    : 'Add Extra Work / Supplementary'}
+                    : extraWorkTab === 'service'
+                    ? (extraServiceIsExtra ? 'Add Extra Work Labor' : 'Add Labor Service')
+                    : (extraPartIsExtra ? 'Add Extra Spare Part' : 'Add Spare Part')}
                 </h3>
               </div>
               <button
@@ -1301,7 +1313,7 @@ const JobCardDetails: React.FC = () => {
                   }`}
                 >
                   <Wrench className="h-4 w-4" />
-                  <span>Extra Labor / Service</span>
+                  <span>Labor / Service</span>
                 </button>
                 <button
                   type="button"
@@ -1313,7 +1325,7 @@ const JobCardDetails: React.FC = () => {
                   }`}
                 >
                   <Package className="h-4 w-4" />
-                  <span>Extra Spare Part</span>
+                  <span>Spare Part / Material</span>
                 </button>
               </div>
             ) : (
@@ -1321,12 +1333,12 @@ const JobCardDetails: React.FC = () => {
                 {editingService ? (
                   <>
                     <Wrench className="h-4 w-4 text-primary-500" />
-                    <span>Modifying details and technician assignments for <strong>{editingService.service_name}</strong></span>
+                    <span>Modifying details and origin type for <strong>{editingService.service_name}</strong></span>
                   </>
                 ) : (
                   <>
                     <Package className="h-4 w-4 text-primary-500" />
-                    <span>Modifying details for <strong>{editingPart?.part_name}</strong></span>
+                    <span>Modifying details and origin type for <strong>{editingPart?.part_name}</strong></span>
                   </>
                 )}
               </div>
@@ -1335,6 +1347,63 @@ const JobCardDetails: React.FC = () => {
             <div className="p-5 overflow-y-auto flex-1">
               {extraWorkTab === 'service' ? (
                 <form onSubmit={handleAddExtraService} className="space-y-4">
+                  {/* Origin / Classification Selector */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Work Scope / Classification *
+                    </label>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setExtraServiceIsExtra(false)}
+                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                          !extraServiceIsExtra
+                            ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-500 dark:border-blue-700 ring-1 ring-blue-500'
+                            : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${
+                            !extraServiceIsExtra ? 'border-blue-600 bg-blue-600' : 'border-slate-400'
+                          }`}>
+                            {!extraServiceIsExtra && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
+                          </span>
+                          <span className="text-xs font-bold text-gray-900 dark:text-slate-100">
+                            Initial Quotation
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 pl-5 leading-tight">
+                          Planned scope included in initial customer estimate
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setExtraServiceIsExtra(true)}
+                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                          extraServiceIsExtra
+                            ? 'bg-amber-50/80 dark:bg-amber-950/40 border-amber-500 dark:border-amber-700 ring-1 ring-amber-500'
+                            : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${
+                            extraServiceIsExtra ? 'border-amber-600 bg-amber-600' : 'border-slate-400'
+                          }`}>
+                            {extraServiceIsExtra && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
+                          </span>
+                          <span className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                            <Sparkles className="h-3 w-3" />
+                            Extra Work
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 pl-5 leading-tight">
+                          Discovered mid-repair, billed as additional scope
+                        </p>
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Catalog quick-picker (Only shown when adding new) */}
                   {!editingService && (
                     <div>
@@ -1492,12 +1561,71 @@ const JobCardDetails: React.FC = () => {
                     >
                       {editingService
                         ? (updateServiceMutation.isLoading ? 'Saving...' : 'Save Service Changes')
-                        : (addServiceMutation.isLoading ? 'Adding...' : 'Add Extra Service')}
+                        : (addServiceMutation.isLoading
+                            ? 'Adding...'
+                            : (extraServiceIsExtra ? 'Add Extra Service' : 'Add Planned Service'))}
                     </button>
                   </div>
                 </form>
               ) : (
                 <form onSubmit={handleAddExtraPart} className="space-y-4">
+                  {/* Origin / Classification Selector */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Part Scope / Classification *
+                    </label>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setExtraPartIsExtra(false)}
+                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                          !extraPartIsExtra
+                            ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-500 dark:border-blue-700 ring-1 ring-blue-500'
+                            : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${
+                            !extraPartIsExtra ? 'border-blue-600 bg-blue-600' : 'border-slate-400'
+                          }`}>
+                            {!extraPartIsExtra && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
+                          </span>
+                          <span className="text-xs font-bold text-gray-900 dark:text-slate-100">
+                            Initial Quotation
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 pl-5 leading-tight">
+                          Planned part included in initial customer estimate
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setExtraPartIsExtra(true)}
+                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                          extraPartIsExtra
+                            ? 'bg-amber-50/80 dark:bg-amber-950/40 border-amber-500 dark:border-amber-700 ring-1 ring-amber-500'
+                            : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${
+                            extraPartIsExtra ? 'border-amber-600 bg-amber-600' : 'border-slate-400'
+                          }`}>
+                            {extraPartIsExtra && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
+                          </span>
+                          <span className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                            <Sparkles className="h-3 w-3" />
+                            Extra Material
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 pl-5 leading-tight">
+                          Discovered mid-repair, billed as additional material
+                        </p>
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Catalog quick-picker (Only shown when adding new) */}
                   {!editingPart && (
                     <div>
@@ -1621,7 +1749,9 @@ const JobCardDetails: React.FC = () => {
                     >
                       {editingPart
                         ? (updatePartMutation.isLoading ? 'Saving...' : 'Save Part Changes')
-                        : (addPartMutation.isLoading ? 'Adding...' : 'Add Extra Spare Part')}
+                        : (addPartMutation.isLoading
+                            ? 'Adding...'
+                            : (extraPartIsExtra ? 'Add Extra Spare Part' : 'Add Planned Spare Part'))}
                     </button>
                   </div>
                 </form>
