@@ -19,6 +19,12 @@ export const AVAILABLE_SCOPES: ScopeDefinition[] = [
     category: 'operations'
   },
   {
+    id: 'assignable_technician',
+    name: 'Assignable as Technician',
+    description: 'Eligible to be assigned to vehicle job cards and service tasks (for technicians & working managers)',
+    category: 'operations'
+  },
+  {
     id: 'bills',
     name: 'Bills & Invoices',
     description: 'Create, edit, view, print invoices, and record customer payments',
@@ -58,7 +64,7 @@ export const AVAILABLE_SCOPES: ScopeDefinition[] = [
 
 export const ROLE_DEFAULT_SCOPES: Record<string, string[]> = {
   MANAGER: ['dashboard', 'job_cards', 'bills', 'customers', 'spare_parts', 'services', 'financial', 'users'],
-  TECHNICIAN: ['dashboard', 'job_cards', 'bills', 'customers', 'spare_parts', 'services'],
+  TECHNICIAN: ['dashboard', 'job_cards', 'assignable_technician', 'bills', 'customers', 'spare_parts', 'services'],
   CUSTOMER: ['bills']
 };
 
@@ -66,12 +72,17 @@ export const SCOPE_PRESETS = [
   {
     id: 'all',
     label: 'All Scopes',
-    scopes: ['dashboard', 'job_cards', 'bills', 'customers', 'spare_parts', 'services', 'financial', 'users']
+    scopes: ['dashboard', 'job_cards', 'assignable_technician', 'bills', 'customers', 'spare_parts', 'services', 'financial', 'users']
+  },
+  {
+    id: 'working_manager',
+    label: 'Working Manager',
+    scopes: ['dashboard', 'job_cards', 'assignable_technician', 'bills', 'customers', 'spare_parts', 'services', 'financial', 'users']
   },
   {
     id: 'technician',
     label: 'Technician Default',
-    scopes: ['dashboard', 'job_cards', 'bills', 'customers', 'spare_parts', 'services']
+    scopes: ['dashboard', 'job_cards', 'assignable_technician', 'bills', 'customers', 'spare_parts', 'services']
   },
   {
     id: 'billing',

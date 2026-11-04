@@ -72,8 +72,8 @@ const initializeDatabase = async () => {
       CREATE INDEX IF NOT EXISTS idx_garage_investments_type ON garage_investments(investment_type);
       
       -- Initialize default scopes for existing users if empty
-      UPDATE users SET scopes = '["dashboard", "bills", "customers", "spare_parts", "services", "financial", "users"]'::jsonb WHERE role = 'MANAGER' AND (scopes IS NULL OR scopes = '[]'::jsonb);
-      UPDATE users SET scopes = '["dashboard", "bills", "customers", "spare_parts", "services"]'::jsonb WHERE role = 'TECHNICIAN' AND (scopes IS NULL OR scopes = '[]'::jsonb);
+      UPDATE users SET scopes = '["dashboard", "job_cards", "bills", "customers", "spare_parts", "services", "financial", "users"]'::jsonb WHERE role = 'MANAGER' AND (scopes IS NULL OR scopes = '[]'::jsonb);
+      UPDATE users SET scopes = '["dashboard", "job_cards", "assignable_technician", "bills", "customers", "spare_parts", "services"]'::jsonb WHERE role = 'TECHNICIAN' AND (scopes IS NULL OR scopes = '[]'::jsonb);
       UPDATE users SET scopes = '["bills"]'::jsonb WHERE role = 'CUSTOMER' AND (scopes IS NULL OR scopes = '[]'::jsonb);
 
       ALTER TABLE customers ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL;

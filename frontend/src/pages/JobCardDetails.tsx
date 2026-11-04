@@ -1237,8 +1237,10 @@ const JobCardDetails: React.FC = () => {
                       className="input w-full text-xs"
                     >
                       <option value="">-- Assign a technician --</option>
-                      {(technicians || []).map((t: any) => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
+                      {((technicians?.technicians || (Array.isArray(technicians) ? technicians : []))).map((t: any) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} {t.role === 'MANAGER' ? '(Manager)' : ''}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -1542,30 +1544,43 @@ const JobCardDetails: React.FC = () => {
               </p>
 
               <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                {(technicians || []).map((t: any) => {
-                  const isChecked = editTechIds.includes(t.id);
-                  return (
-                    <label
-                      key={t.id}
-                      className={`flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
-                        isChecked
-                          ? 'bg-primary-50 dark:bg-primary-950/40 border-primary-300 dark:border-primary-800 text-primary-900 dark:text-primary-200'
-                          : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleTechSelection(t.id)}
-                          className="rounded text-primary-600 focus:ring-primary-500 h-4 w-4"
-                        />
-                        <span className="font-semibold">{t.name}</span>
-                      </div>
-                      <span className="text-[10px] text-slate-400">{t.phone || t.email}</span>
-                    </label>
-                  );
-                })}
+                {((technicians?.technicians || (Array.isArray(technicians) ? technicians : []))).length === 0 ? (
+                  <p className="text-xs text-slate-400 italic py-4 text-center">
+                    No assignable technicians or staff found. Ensure users have the "Assignable as Technician" scope in User Management.
+                  </p>
+                ) : (
+                  ((technicians?.technicians || (Array.isArray(technicians) ? technicians : []))).map((t: any) => {
+                    const isChecked = editTechIds.includes(t.id);
+                    return (
+                      <label
+                        key={t.id}
+                        className={`flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                          isChecked
+                            ? 'bg-primary-50 dark:bg-primary-950/40 border-primary-300 dark:border-primary-800 text-primary-900 dark:text-primary-200'
+                            : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleTechSelection(t.id)}
+                            className="rounded text-primary-600 focus:ring-primary-500 h-4 w-4"
+                          />
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold">{t.name}</span>
+                            {t.role === 'MANAGER' && (
+                              <span className="text-[9px] px-1.5 py-0.2 rounded font-bold uppercase bg-purple-100 text-purple-700 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                Manager
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-slate-400">{t.phone || t.email}</span>
+                      </label>
+                    );
+                  })
+                )}
               </div>
 
               <div className="pt-3 border-t border-gray-100 dark:border-slate-800 flex justify-end gap-2">

@@ -48,7 +48,7 @@ const formatUserRow = (row: any) => {
   } else if (row.role === 'MANAGER') {
     scopes = ['dashboard', 'job_cards', 'bills', 'customers', 'spare_parts', 'services', 'financial', 'users'];
   } else if (row.role === 'TECHNICIAN') {
-    scopes = ['dashboard', 'job_cards', 'bills', 'customers', 'spare_parts', 'services'];
+    scopes = ['dashboard', 'job_cards', 'assignable_technician', 'bills', 'customers', 'spare_parts', 'services'];
   } else if (row.role === 'CUSTOMER') {
     scopes = ['bills'];
   }
@@ -141,7 +141,7 @@ router.get('/', requireRoleOrScope(['MANAGER'], 'users'), async (req: AuthReques
   }
 });
 
-// Get technicians (Active technicians only)
+// Get technicians (Active technicians and managers with assignable_technician scope)
 router.get('/technicians', async (req: AuthRequest, res) => {
   try {
     const result = await query(
@@ -155,9 +155,12 @@ router.get('/technicians', async (req: AuthRequest, res) => {
         is_active as "isActive", 
         created_at as "createdAt" 
       FROM users 
-      WHERE role = $1 AND is_active = true 
-      ORDER BY name`,
-      ['TECHNICIAN']
+      WHERE is_active = true 
+        AND (
+          (role = 'TECHNICIAN' AND (scopes IS NULL OR scopes::text = '[]' OR scopes::text NOT LIKE '%"dashboard"%' OR scopes::text LIKE '%"assignable_technician"%'))
+          OR (scopes IS NOT NULL AND scopes::text LIKE '%"assignable_technician"%')
+        )
+      ORDER BY name ASC`
     );
     
     res.json({ technicians: result.rows.map(formatUserRow) });
@@ -219,7 +222,7 @@ router.post('/', requireRoleOrScope(['MANAGER'], 'users'), async (req: AuthReque
       if (role === 'MANAGER') {
         scopes = ['dashboard', 'job_cards', 'bills', 'customers', 'spare_parts', 'services', 'financial', 'users'];
       } else if (role === 'TECHNICIAN') {
-        scopes = ['dashboard', 'job_cards', 'bills', 'customers', 'spare_parts', 'services'];
+        scopes = ['dashboard', 'job_cards', 'assignable_technician', 'bills', 'customers', 'spare_parts', 'services'];
       } else {
         scopes = ['bills'];
       }

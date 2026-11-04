@@ -39,9 +39,9 @@ const normalizeUser = (u: any): User => {
       scopes = [];
     }
   } else if (u.role === 'MANAGER') {
-    scopes = ['dashboard', 'bills', 'customers', 'spare_parts', 'services', 'financial', 'users'];
+    scopes = ['dashboard', 'job_cards', 'bills', 'customers', 'spare_parts', 'services', 'financial', 'users'];
   } else if (u.role === 'TECHNICIAN') {
-    scopes = ['dashboard', 'bills', 'customers', 'spare_parts', 'services'];
+    scopes = ['dashboard', 'job_cards', 'assignable_technician', 'bills', 'customers', 'spare_parts', 'services'];
   } else if (u.role === 'CUSTOMER') {
     scopes = ['bills'];
   }

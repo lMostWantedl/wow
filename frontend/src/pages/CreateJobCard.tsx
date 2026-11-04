@@ -377,40 +377,57 @@ const CreateJobCard: React.FC = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {technicians?.technicians?.map((tech: any) => {
-              const isSelected = selectedTechnicianIds.includes(tech.id);
-              return (
-                <div
-                  key={tech.id}
-                  onClick={() => toggleTechnician(tech.id)}
-                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
-                    isSelected
-                      ? 'bg-primary-50/80 dark:bg-primary-950/40 border-primary-500 shadow-xs'
-                      : 'bg-gray-50/50 dark:bg-slate-800/40 border-gray-200 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                      isSelected ? 'bg-primary-600 text-white' : 'bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-slate-300'
-                    }`}>
-                      {tech.name.charAt(0)}
+          {(!technicians?.technicians || technicians.technicians.length === 0) ? (
+            <div className="p-6 text-center border border-dashed border-gray-300 dark:border-slate-800 rounded-xl">
+              <Users className="h-8 w-8 text-slate-400 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">No Assignable Technicians or Staff Available</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
+                Ensure technician accounts exist or grant the <strong>"Assignable as Technician"</strong> scope to working managers in User Management.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {technicians.technicians.map((tech: any) => {
+                const isSelected = selectedTechnicianIds.includes(tech.id);
+                return (
+                  <div
+                    key={tech.id}
+                    onClick={() => toggleTechnician(tech.id)}
+                    className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                      isSelected
+                        ? 'bg-primary-50/80 dark:bg-primary-950/40 border-primary-500 shadow-xs'
+                        : 'bg-gray-50/50 dark:bg-slate-800/40 border-gray-200 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                        isSelected ? 'bg-primary-600 text-white' : 'bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-slate-300'
+                      }`}>
+                        {tech.name.charAt(0)}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{tech.name}</p>
+                          {tech.role === 'MANAGER' && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-bold uppercase bg-purple-100 text-purple-700 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                              Manager
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-slate-400">{tech.phone}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{tech.name}</p>
-                      <p className="text-xs text-gray-500 dark:text-slate-400">{tech.phone}</p>
-                    </div>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {}} // handled by parent div
+                      className="h-4 w-4 text-primary-600 rounded"
+                    />
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => {}} // handled by parent div
-                    className="h-4 w-4 text-primary-600 rounded"
-                  />
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* 3. Complaints, Inspection & Checklist */}

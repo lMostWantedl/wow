@@ -868,7 +868,7 @@ const CreateBill: React.FC = () => {
                     <option value="">Select Technician</option>
                     {technicians?.technicians.map((tech) => (
                       <option key={tech.id} value={tech.id}>
-                        {tech.name}
+                        {tech.name}{tech.role === 'MANAGER' ? ' (Manager)' : ''}
                       </option>
                     ))}
                   </select>

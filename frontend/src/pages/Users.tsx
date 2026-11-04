@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 
 const ROLE_DEFAULT_SCOPES: Record<string, string[]> = {
   MANAGER: ['dashboard', 'job_cards', 'bills', 'customers', 'spare_parts', 'services', 'financial', 'users'],
-  TECHNICIAN: ['dashboard', 'job_cards', 'bills', 'customers', 'spare_parts', 'services'],
+  TECHNICIAN: ['dashboard', 'job_cards', 'assignable_technician', 'bills', 'customers', 'spare_parts', 'services'],
   CUSTOMER: ['bills']
 };
 

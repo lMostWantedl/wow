@@ -292,7 +292,7 @@ const EditBill: React.FC = () => {
                 {technicians?.technicians
                   ?.map((tech: any) => (
                     <option key={tech.id} value={tech.id}>
-                      {tech.name}
+                      {tech.name}{tech.role === 'MANAGER' ? ' (Manager)' : ''}
                     </option>
                   ))}
               </select>
