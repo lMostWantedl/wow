@@ -111,5 +111,47 @@ export const jobCardsService = {
   }): Promise<{ message: string; bill: any; billId: string }> => {
     const response = await api.post(`/job-cards/${id}/convert-to-invoice`, data || {});
     return response.data;
+  },
+
+  revertInvoice: async (id: string): Promise<{ message: string; jobCard: JobCard }> => {
+    const response = await api.post(`/job-cards/${id}/revert-invoice`);
+    return response.data;
+  },
+
+  deleteJobCard: async (id: string): Promise<{ message: string }> => {
+    const response = await api.delete(`/job-cards/${id}`);
+    return response.data;
+  },
+
+  procureSparePart: async (id: string, partId: string, data: {
+    procuredCost: number;
+    vendorName?: string;
+    paymentMethod?: string;
+    invoiceRef?: string;
+    notes?: string;
+  }): Promise<any> => {
+    const response = await api.post(`/job-cards/${id}/spare-parts/${partId}/procure`, data);
+    return response.data;
+  },
+
+  unprocureSparePart: async (id: string, partId: string): Promise<any> => {
+    const response = await api.delete(`/job-cards/${id}/spare-parts/${partId}/procure`);
+    return response.data;
+  },
+
+  procureService: async (id: string, serviceId: string, data: {
+    procuredCost: number;
+    vendorName?: string;
+    paymentMethod?: string;
+    invoiceRef?: string;
+    notes?: string;
+  }): Promise<any> => {
+    const response = await api.post(`/job-cards/${id}/services/${serviceId}/procure`, data);
+    return response.data;
+  },
+
+  unprocureService: async (id: string, serviceId: string): Promise<any> => {
+    const response = await api.delete(`/job-cards/${id}/services/${serviceId}/procure`);
+    return response.data;
   }
 };

@@ -37,6 +37,8 @@ import {
   ArrowUpRight,
   Briefcase,
   Landmark,
+  Package,
+  ExternalLink,
 } from 'lucide-react';
 import {
   XAxis,
@@ -135,6 +137,18 @@ export const CATEGORY_CONFIG: Record<
     label: 'Insurance & Taxes',
     badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 dark:border dark:border-blue-800/60',
     icon: ShieldCheck,
+    defaultType: 'OPEX',
+  },
+  PARTS_PROCUREMENT: {
+    label: 'Job Parts Procurement',
+    badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border dark:border-emerald-800/60',
+    icon: Package,
+    defaultType: 'OPEX',
+  },
+  SUBLET_SERVICES: {
+    label: 'Sublet & Specialized Lab',
+    badgeClass: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border dark:border-indigo-800/60',
+    icon: ExternalLink,
     defaultType: 'OPEX',
   },
   MISCELLANEOUS: {

@@ -5,7 +5,7 @@ import { AuthRequest, requireRoleOrScope } from '../middleware/auth';
 const router = express.Router();
 
 // Generate sequential expense number EXP-YYYYMM-XXXX
-const generateExpenseNumber = async (): Promise<string> => {
+export const generateExpenseNumber = async (): Promise<string> => {
   const date = new Date();
   const yearMonth = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}`;
   const prefix = `EXP-${yearMonth}-`;
@@ -81,13 +81,18 @@ router.get('/report', requireRoleOrScope(['MANAGER'], 'financial'), async (req: 
       [startDate, endDate]
     );
 
-    // 3. Cost of Goods Sold (Spare parts cost)
+    // 3. Cost of Goods Sold (Spare parts cost - excluding parts already expensed via PARTS_PROCUREMENT)
     const costResult = await query(
       `SELECT COALESCE(SUM(bsp.quantity * sp.cost), 0) as total_cogs
        FROM bill_spare_parts bsp
        JOIN spare_parts sp ON bsp.spare_part_id = sp.id
        JOIN bills b ON bsp.bill_id = b.id
-       WHERE b.service_date >= $1 AND b.service_date <= $2`,
+       LEFT JOIN job_cards jc ON jc.bill_id = bsp.bill_id
+       LEFT JOIN job_card_spare_parts jcsp ON jcsp.job_card_id = jc.id 
+         AND jcsp.spare_part_id = bsp.spare_part_id 
+         AND jcsp.is_procured = TRUE
+       WHERE b.service_date >= $1 AND b.service_date <= $2
+         AND jcsp.id IS NULL`,
       [startDate, endDate]
     );
 
@@ -137,7 +142,12 @@ router.get('/report', requireRoleOrScope(['MANAGER'], 'financial'), async (req: 
     const allTimeCogsResult = await query(
       `SELECT COALESCE(SUM(bsp.quantity * sp.cost), 0) as all_time_cogs
        FROM bill_spare_parts bsp
-       JOIN spare_parts sp ON bsp.spare_part_id = sp.id`
+       JOIN spare_parts sp ON bsp.spare_part_id = sp.id
+       LEFT JOIN job_cards jc ON jc.bill_id = bsp.bill_id
+       LEFT JOIN job_card_spare_parts jcsp ON jcsp.job_card_id = jc.id 
+         AND jcsp.spare_part_id = bsp.spare_part_id 
+         AND jcsp.is_procured = TRUE
+       WHERE jcsp.id IS NULL`
     );
     const allTimeCogs = parseFloat(allTimeCogsResult.rows[0].all_time_cogs) || 0;
 
@@ -193,6 +203,11 @@ router.get('/report', requireRoleOrScope(['MANAGER'], 'financial'), async (req: 
          FROM bill_spare_parts bsp
          JOIN spare_parts sp ON bsp.spare_part_id = sp.id
          JOIN bills b ON bsp.bill_id = b.id
+         LEFT JOIN job_cards jc ON jc.bill_id = bsp.bill_id
+         LEFT JOIN job_card_spare_parts jcsp ON jcsp.job_card_id = jc.id 
+           AND jcsp.spare_part_id = bsp.spare_part_id 
+           AND jcsp.is_procured = TRUE
+         WHERE jcsp.id IS NULL
          GROUP BY 1
        ) cogs ON cogs.m = months.m
        LEFT JOIN (
@@ -322,13 +337,18 @@ router.get('/profit-loss', requireRoleOrScope(['MANAGER'], 'financial'), async (
       [start, end]
     );
 
-    // 2. COGS (Parts Cost)
+    // 2. COGS (Parts Cost - excluding parts already expensed via PARTS_PROCUREMENT)
     const cogsResult = await query(
       `SELECT COALESCE(SUM(bsp.quantity * sp.cost), 0) as total
        FROM bill_spare_parts bsp
        JOIN spare_parts sp ON bsp.spare_part_id = sp.id
        JOIN bills b ON bsp.bill_id = b.id
-       WHERE b.service_date >= $1 AND b.service_date <= $2`,
+       LEFT JOIN job_cards jc ON jc.bill_id = bsp.bill_id
+       LEFT JOIN job_card_spare_parts jcsp ON jcsp.job_card_id = jc.id 
+         AND jcsp.spare_part_id = bsp.spare_part_id 
+         AND jcsp.is_procured = TRUE
+       WHERE b.service_date >= $1 AND b.service_date <= $2
+         AND jcsp.id IS NULL`,
       [start, end]
     );
 
@@ -372,6 +392,8 @@ router.get('/profit-loss', requireRoleOrScope(['MANAGER'], 'financial'), async (
       },
       costs: {
         sparePartCosts,
+        partsProcurement: expensesByCategory['PARTS_PROCUREMENT'] || 0,
+        subletServices: expensesByCategory['SUBLET_SERVICES'] || 0,
         rent: expensesByCategory['RENT'] || 0,
         salaries: expensesByCategory['SALARY'] || 0,
         toolsEquipment: expensesByCategory['TOOLS_EQUIPMENT'] || 0,

@@ -265,6 +265,8 @@ export type ExpenseCategory =
   | 'MAINTENANCE'
   | 'MARKETING'
   | 'INSURANCE_TAX'
+  | 'PARTS_PROCUREMENT'
+  | 'SUBLET_SERVICES'
   | 'MISCELLANEOUS';
 
 export type ExpenseType = 'OPEX' | 'CAPEX';
@@ -527,6 +529,13 @@ export interface JobCardService {
     role?: string;
   }>;
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+  is_procured?: boolean;
+  procured_cost?: number;
+  procured_at?: string;
+  procured_vendor?: string;
+  procured_payment_method?: string;
+  procured_invoice_ref?: string;
+  procurement_expense_id?: string;
   created_at?: string;
 }
 
@@ -544,6 +553,13 @@ export interface JobCardSparePart {
   is_extra_work: boolean;
   stock_quantity?: number;
   status: 'REQUESTED' | 'ISSUED' | 'INSTALLED';
+  is_procured?: boolean;
+  procured_cost?: number;
+  procured_at?: string;
+  procured_vendor?: string;
+  procured_payment_method?: string;
+  procured_invoice_ref?: string;
+  procurement_expense_id?: string;
   created_at?: string;
 }
 

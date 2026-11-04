@@ -2,6 +2,7 @@ import express from 'express';
 import { query } from '../database/connection';
 import { AuthRequest } from '../middleware/auth';
 import Joi from 'joi';
+import { generateExpenseNumber } from './financial-simple';
 
 const router = express.Router();
 
@@ -937,6 +938,372 @@ router.post('/:id/convert-to-invoice', async (req: AuthRequest, res) => {
   } catch (error: any) {
     console.error('Convert job card to invoice error:', error);
     res.status(500).json({ message: 'Failed to convert Job Card to Invoice', error: error.message });
+  }
+});
+
+// POST /api/job-cards/:id/revert-invoice
+// Revert an invoiced Job Card back to 'IN_PROGRESS' (Repairs in Progress)
+// Restores inventory stock used for this bill and voids/deletes the linked bill
+router.post('/:id/revert-invoice', async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+
+    const jcResult = await query('SELECT * FROM job_cards WHERE id = $1', [id]);
+    if (jcResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Job Card not found' });
+    }
+
+    const jobCard = jcResult.rows[0];
+
+    if (jobCard.status !== 'INVOICED' && !jobCard.bill_id) {
+      return res.status(400).json({ message: 'Job Card is not in INVOICED status or has no linked bill' });
+    }
+
+    const billId = jobCard.bill_id;
+
+    if (billId) {
+      // 1. Fetch parts that were deducted for this bill and restore stock
+      const billParts = await query('SELECT spare_part_id, quantity FROM bill_spare_parts WHERE bill_id = $1', [billId]);
+      for (const bp of billParts.rows) {
+        if (bp.spare_part_id && bp.quantity) {
+          await query(
+            'UPDATE spare_parts SET stock_quantity = stock_quantity + $1 WHERE id = $2',
+            [parseFloat(bp.quantity || '0'), bp.spare_part_id]
+          );
+        }
+      }
+
+      // 2. Void/Delete payments, services, parts, and bill
+      await query('DELETE FROM payments WHERE bill_id = $1', [billId]);
+      await query('DELETE FROM bill_services WHERE bill_id = $1', [billId]);
+      await query('DELETE FROM bill_spare_parts WHERE bill_id = $1', [billId]);
+      await query('DELETE FROM bills WHERE id = $1', [billId]);
+    }
+
+    // 3. Reset job card back to IN_PROGRESS and clear bill_id & actual_delivery_date
+    const updatedResult = await query(`
+      UPDATE job_cards SET
+        status = 'IN_PROGRESS',
+        bill_id = NULL,
+        actual_delivery_date = NULL,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      RETURNING *
+    `, [id]);
+
+    res.json({
+      message: 'Job Card successfully reverted back to Vehicle Repairs in Progress! Stock restored and invoice voided.',
+      jobCard: updatedResult.rows[0]
+    });
+  } catch (error: any) {
+    console.error('Revert invoice error:', error);
+    res.status(500).json({ message: 'Failed to revert invoice', error: error.message });
+  }
+});
+
+// DELETE /api/job-cards/:id
+// Delete a Job Card, voids its bill and restores stock if invoiced, removes linked procurement expenses
+router.delete('/:id', async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+
+    const jcResult = await query('SELECT * FROM job_cards WHERE id = $1', [id]);
+    if (jcResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Job Card not found' });
+    }
+
+    const jobCard = jcResult.rows[0];
+
+    // 1. If invoiced, restore stock and delete bill
+    if (jobCard.bill_id) {
+      const billParts = await query('SELECT spare_part_id, quantity FROM bill_spare_parts WHERE bill_id = $1', [jobCard.bill_id]);
+      for (const bp of billParts.rows) {
+        if (bp.spare_part_id && bp.quantity) {
+          await query(
+            'UPDATE spare_parts SET stock_quantity = stock_quantity + $1 WHERE id = $2',
+            [parseFloat(bp.quantity || '0'), bp.spare_part_id]
+          );
+        }
+      }
+      await query('DELETE FROM payments WHERE bill_id = $1', [jobCard.bill_id]);
+      await query('DELETE FROM bill_services WHERE bill_id = $1', [jobCard.bill_id]);
+      await query('DELETE FROM bill_spare_parts WHERE bill_id = $1', [jobCard.bill_id]);
+      await query('DELETE FROM bills WHERE id = $1', [jobCard.bill_id]);
+    }
+
+    // 2. Clean up any linked procurement expenses in garage_expenses
+    const partsWithExp = await query(
+      'SELECT procurement_expense_id FROM job_card_spare_parts WHERE job_card_id = $1 AND procurement_expense_id IS NOT NULL',
+      [id]
+    );
+    const servicesWithExp = await query(
+      'SELECT procurement_expense_id FROM job_card_services WHERE job_card_id = $1 AND procurement_expense_id IS NOT NULL',
+      [id]
+    );
+
+    const expenseIds = [
+      ...partsWithExp.rows.map(r => r.procurement_expense_id),
+      ...servicesWithExp.rows.map(r => r.procurement_expense_id)
+    ].filter(Boolean);
+
+    for (const expId of expenseIds) {
+      await query('DELETE FROM garage_expenses WHERE id = $1', [expId]);
+    }
+
+    // 3. Delete job card relations & job card
+    await query('DELETE FROM job_card_technicians WHERE job_card_id = $1', [id]);
+    await query('DELETE FROM job_card_spare_parts WHERE job_card_id = $1', [id]);
+    await query('DELETE FROM job_card_services WHERE job_card_id = $1', [id]);
+    await query('DELETE FROM job_cards WHERE id = $1', [id]);
+
+    res.json({ message: 'Job Card deleted successfully' });
+  } catch (error: any) {
+    console.error('Delete job card error:', error);
+    res.status(500).json({ message: 'Failed to delete Job Card', error: error.message });
+  }
+});
+
+// POST /api/job-cards/:id/spare-parts/:partId/procure
+// Mark spare part as procured and record direct OpEx expense in garage_expenses
+router.post('/:id/spare-parts/:partId/procure', async (req: AuthRequest, res) => {
+  try {
+    const { id, partId } = req.params;
+    const {
+      procuredCost,
+      vendorName = '',
+      paymentMethod = 'CASH',
+      invoiceRef = '',
+      notes = ''
+    } = req.body;
+
+    if (!procuredCost || parseFloat(procuredCost) < 0) {
+      return res.status(400).json({ message: 'Valid procurement cost is required' });
+    }
+
+    const jcRes = await query('SELECT * FROM job_cards WHERE id = $1', [id]);
+    if (jcRes.rows.length === 0) return res.status(404).json({ message: 'Job Card not found' });
+    const jc = jcRes.rows[0];
+
+    const partRes = await query('SELECT * FROM job_card_spare_parts WHERE id = $1 AND job_card_id = $2', [partId, id]);
+    if (partRes.rows.length === 0) return res.status(404).json({ message: 'Spare Part not found on this Job Card' });
+    const part = partRes.rows[0];
+
+    // If already procured with an expense, delete the old expense first
+    if (part.procurement_expense_id) {
+      await query('DELETE FROM garage_expenses WHERE id = $1', [part.procurement_expense_id]);
+    }
+
+    const expenseNumber = await generateExpenseNumber();
+    const expenseTitle = `Procured Part: ${part.part_name} (${part.quantity} ${part.unit || 'pcs'}) - Job #${jc.job_card_number}`;
+    const expenseNotes = notes || `Procurement for Job Card #${jc.job_card_number} (${jc.vehicle_number || ''})`;
+
+    const expInsert = await query(`
+      INSERT INTO garage_expenses (
+        expense_number, title, category, expense_type, amount,
+        expense_date, payment_method, payee_recipient,
+        invoice_reference, notes, created_by
+      ) VALUES ($1, $2, 'PARTS_PROCUREMENT', 'OPEX', $3, CURRENT_DATE, $4, $5, $6, $7, $8)
+      RETURNING *
+    `, [
+      expenseNumber,
+      expenseTitle,
+      parseFloat(procuredCost),
+      paymentMethod,
+      vendorName.trim(),
+      invoiceRef.trim(),
+      expenseNotes.trim(),
+      req.user?.id || null
+    ]);
+
+    const createdExpense = expInsert.rows[0];
+
+    const updatedPart = await query(`
+      UPDATE job_card_spare_parts SET
+        is_procured = true,
+        procured_cost = $1,
+        procured_at = CURRENT_TIMESTAMP,
+        procured_vendor = $2,
+        procured_payment_method = $3,
+        procured_invoice_ref = $4,
+        procurement_expense_id = $5
+      WHERE id = $6
+      RETURNING *
+    `, [
+      parseFloat(procuredCost),
+      vendorName.trim(),
+      paymentMethod,
+      invoiceRef.trim(),
+      createdExpense.id,
+      partId
+    ]);
+
+    res.json({
+      message: 'Spare part marked as procured and recorded in Financial Ledger',
+      part: updatedPart.rows[0],
+      expense: createdExpense
+    });
+  } catch (error: any) {
+    console.error('Procure spare part error:', error);
+    res.status(500).json({ message: 'Failed to mark spare part as procured', error: error.message });
+  }
+});
+
+// DELETE /api/job-cards/:id/spare-parts/:partId/procure
+// Unmark procurement and delete expense from garage_expenses
+router.delete('/:id/spare-parts/:partId/procure', async (req: AuthRequest, res) => {
+  try {
+    const { id, partId } = req.params;
+
+    const partRes = await query('SELECT * FROM job_card_spare_parts WHERE id = $1 AND job_card_id = $2', [partId, id]);
+    if (partRes.rows.length === 0) return res.status(404).json({ message: 'Spare Part not found on this Job Card' });
+    const part = partRes.rows[0];
+
+    if (part.procurement_expense_id) {
+      await query('DELETE FROM garage_expenses WHERE id = $1', [part.procurement_expense_id]);
+    }
+
+    const updatedPart = await query(`
+      UPDATE job_card_spare_parts SET
+        is_procured = false,
+        procured_cost = NULL,
+        procured_at = NULL,
+        procured_vendor = NULL,
+        procured_payment_method = NULL,
+        procured_invoice_ref = NULL,
+        procurement_expense_id = NULL
+      WHERE id = $1
+      RETURNING *
+    `, [partId]);
+
+    res.json({
+      message: 'Procurement unmarked and expense reversed from Financial Ledger',
+      part: updatedPart.rows[0]
+    });
+  } catch (error: any) {
+    console.error('Unmark spare part procurement error:', error);
+    res.status(500).json({ message: 'Failed to unmark spare part procurement', error: error.message });
+  }
+});
+
+// POST /api/job-cards/:id/services/:serviceId/procure
+// Mark external sublet service as procured / paid to lab and record direct OpEx expense in garage_expenses
+router.post('/:id/services/:serviceId/procure', async (req: AuthRequest, res) => {
+  try {
+    const { id, serviceId } = req.params;
+    const {
+      procuredCost,
+      vendorName = '',
+      paymentMethod = 'CASH',
+      invoiceRef = '',
+      notes = ''
+    } = req.body;
+
+    if (!procuredCost || parseFloat(procuredCost) < 0) {
+      return res.status(400).json({ message: 'Valid procurement cost is required' });
+    }
+
+    const jcRes = await query('SELECT * FROM job_cards WHERE id = $1', [id]);
+    if (jcRes.rows.length === 0) return res.status(404).json({ message: 'Job Card not found' });
+    const jc = jcRes.rows[0];
+
+    const sRes = await query('SELECT * FROM job_card_services WHERE id = $1 AND job_card_id = $2', [serviceId, id]);
+    if (sRes.rows.length === 0) return res.status(404).json({ message: 'Service not found on this Job Card' });
+    const service = sRes.rows[0];
+
+    if (service.procurement_expense_id) {
+      await query('DELETE FROM garage_expenses WHERE id = $1', [service.procurement_expense_id]);
+    }
+
+    const expenseNumber = await generateExpenseNumber();
+    const finalVendor = vendorName.trim() || service.vendor_name || 'Sublet Lab';
+    const expenseTitle = `Sublet Service: ${service.service_name} (${finalVendor}) - Job #${jc.job_card_number}`;
+    const expenseNotes = notes || `External sublet service for Job Card #${jc.job_card_number} (${jc.vehicle_number || ''})`;
+
+    const expInsert = await query(`
+      INSERT INTO garage_expenses (
+        expense_number, title, category, expense_type, amount,
+        expense_date, payment_method, payee_recipient,
+        invoice_reference, notes, created_by
+      ) VALUES ($1, $2, 'SUBLET_SERVICES', 'OPEX', $3, CURRENT_DATE, $4, $5, $6, $7, $8)
+      RETURNING *
+    `, [
+      expenseNumber,
+      expenseTitle,
+      parseFloat(procuredCost),
+      paymentMethod,
+      finalVendor,
+      invoiceRef.trim(),
+      expenseNotes.trim(),
+      req.user?.id || null
+    ]);
+
+    const createdExpense = expInsert.rows[0];
+
+    const updatedService = await query(`
+      UPDATE job_card_services SET
+        is_procured = true,
+        procured_cost = $1,
+        procured_at = CURRENT_TIMESTAMP,
+        procured_vendor = $2,
+        procured_payment_method = $3,
+        procured_invoice_ref = $4,
+        procurement_expense_id = $5
+      WHERE id = $6
+      RETURNING *
+    `, [
+      parseFloat(procuredCost),
+      finalVendor,
+      paymentMethod,
+      invoiceRef.trim(),
+      createdExpense.id,
+      serviceId
+    ]);
+
+    res.json({
+      message: 'Sublet service marked as procured / paid and recorded in Financial Ledger',
+      service: updatedService.rows[0],
+      expense: createdExpense
+    });
+  } catch (error: any) {
+    console.error('Procure sublet service error:', error);
+    res.status(500).json({ message: 'Failed to mark sublet service as procured', error: error.message });
+  }
+});
+
+// DELETE /api/job-cards/:id/services/:serviceId/procure
+// Unmark sublet service procurement and delete expense from garage_expenses
+router.delete('/:id/services/:serviceId/procure', async (req: AuthRequest, res) => {
+  try {
+    const { id, serviceId } = req.params;
+
+    const sRes = await query('SELECT * FROM job_card_services WHERE id = $1 AND job_card_id = $2', [serviceId, id]);
+    if (sRes.rows.length === 0) return res.status(404).json({ message: 'Service not found on this Job Card' });
+    const service = sRes.rows[0];
+
+    if (service.procurement_expense_id) {
+      await query('DELETE FROM garage_expenses WHERE id = $1', [service.procurement_expense_id]);
+    }
+
+    const updatedService = await query(`
+      UPDATE job_card_services SET
+        is_procured = false,
+        procured_cost = NULL,
+        procured_at = NULL,
+        procured_vendor = NULL,
+        procured_payment_method = NULL,
+        procured_invoice_ref = NULL,
+        procurement_expense_id = NULL
+      WHERE id = $1
+      RETURNING *
+    `, [serviceId]);
+
+    res.json({
+      message: 'Sublet service procurement unmarked and expense reversed from Financial Ledger',
+      service: updatedService.rows[0]
+    });
+  } catch (error: any) {
+    console.error('Unmark sublet service procurement error:', error);
+    res.status(500).json({ message: 'Failed to unmark sublet service procurement', error: error.message });
   }
 });
 

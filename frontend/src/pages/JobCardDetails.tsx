@@ -38,7 +38,10 @@ import {
   DollarSign,
   Search,
   Building2,
-  X
+  X,
+  RotateCcw,
+  CreditCard,
+  Undo2
 } from 'lucide-react';
 
 const safeFormatDate = (dateString: string | null | undefined, formatString: string = 'MMM dd, yyyy'): string => {
@@ -74,6 +77,24 @@ const JobCardDetails: React.FC = () => {
   const [extraWorkTab, setExtraWorkTab] = useState<'labor' | 'external' | 'part'>('labor');
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showTechModal, setShowTechModal] = useState(false);
+  const [showRevertModal, setShowRevertModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  // Procurement modal states
+  const [procurementModal, setProcurementModal] = useState<{
+    isOpen: boolean;
+    type: 'PART' | 'SERVICE';
+    item: any;
+  }>({
+    isOpen: false,
+    type: 'PART',
+    item: null
+  });
+  const [procureCost, setProcureCost] = useState('');
+  const [procureVendor, setProcureVendor] = useState('');
+  const [procurePaymentMethod, setProcurePaymentMethod] = useState<'CASH' | 'UPI' | 'BANK_TRANSFER' | 'CARD'>('CASH');
+  const [procureInvoiceRef, setProcureInvoiceRef] = useState('');
+  const [procureNotes, setProcureNotes] = useState('');
 
   // Edit item tracking
   const [editingService, setEditingService] = useState<JobCardService | null>(null);
@@ -385,6 +406,150 @@ const JobCardDetails: React.FC = () => {
       }
     }
   );
+
+  // Revert to In-Progress mutation
+  const revertInvoiceMutation = useMutation(
+    () => jobCardsService.revertInvoice(id!),
+    {
+      onSuccess: () => {
+        toast.success('Job Card reverted to Repairs in Progress! Invoice voided & inventory stock restored.');
+        setShowRevertModal(false);
+        queryClient.invalidateQueries(['job-card', id]);
+        queryClient.invalidateQueries('job-cards');
+        queryClient.invalidateQueries('bills');
+        queryClient.invalidateQueries('financial-report');
+      },
+      onError: (err: any) => {
+        toast.error(err?.response?.data?.message || 'Failed to revert invoice');
+      }
+    }
+  );
+
+  // Delete Job Card mutation
+  const deleteJobCardMutation = useMutation(
+    () => jobCardsService.deleteJobCard(id!),
+    {
+      onSuccess: () => {
+        toast.success('Job Card deleted successfully');
+        setShowDeleteModal(false);
+        queryClient.invalidateQueries('job-cards');
+        navigate('/job-cards');
+      },
+      onError: (err: any) => {
+        toast.error(err?.response?.data?.message || 'Failed to delete Job Card');
+      }
+    }
+  );
+
+  // Procure spare part mutation
+  const procureSparePartMutation = useMutation(
+    (data: { partId: string; procuredCost: number; vendorName?: string; paymentMethod?: string; invoiceRef?: string; notes?: string }) =>
+      jobCardsService.procureSparePart(id!, data.partId, data),
+    {
+      onSuccess: () => {
+        toast.success('Spare part marked as procured & recorded in Financial Ledger');
+        setProcurementModal({ isOpen: false, type: 'PART', item: null });
+        queryClient.invalidateQueries(['job-card', id]);
+        queryClient.invalidateQueries('financial-report');
+        queryClient.invalidateQueries('garage-expenses');
+      },
+      onError: (err: any) => {
+        toast.error(err?.response?.data?.message || 'Failed to mark spare part as procured');
+      }
+    }
+  );
+
+  // Unprocure spare part mutation
+  const unprocureSparePartMutation = useMutation(
+    (partId: string) => jobCardsService.unprocureSparePart(id!, partId),
+    {
+      onSuccess: () => {
+        toast.success('Procurement unmarked & reversed from Financial Ledger');
+        queryClient.invalidateQueries(['job-card', id]);
+        queryClient.invalidateQueries('financial-report');
+        queryClient.invalidateQueries('garage-expenses');
+      },
+      onError: (err: any) => {
+        toast.error(err?.response?.data?.message || 'Failed to unmark procurement');
+      }
+    }
+  );
+
+  // Procure sublet service mutation
+  const procureServiceMutation = useMutation(
+    (data: { serviceId: string; procuredCost: number; vendorName?: string; paymentMethod?: string; invoiceRef?: string; notes?: string }) =>
+      jobCardsService.procureService(id!, data.serviceId, data),
+    {
+      onSuccess: () => {
+        toast.success('Sublet service marked as procured & recorded in Financial Ledger');
+        setProcurementModal({ isOpen: false, type: 'SERVICE', item: null });
+        queryClient.invalidateQueries(['job-card', id]);
+        queryClient.invalidateQueries('financial-report');
+        queryClient.invalidateQueries('garage-expenses');
+      },
+      onError: (err: any) => {
+        toast.error(err?.response?.data?.message || 'Failed to mark sublet service as procured');
+      }
+    }
+  );
+
+  // Unprocure sublet service mutation
+  const unprocureServiceMutation = useMutation(
+    (serviceId: string) => jobCardsService.unprocureService(id!, serviceId),
+    {
+      onSuccess: () => {
+        toast.success('Sublet procurement unmarked & reversed from Financial Ledger');
+        queryClient.invalidateQueries(['job-card', id]);
+        queryClient.invalidateQueries('financial-report');
+        queryClient.invalidateQueries('garage-expenses');
+      },
+      onError: (err: any) => {
+        toast.error(err?.response?.data?.message || 'Failed to unmark sublet procurement');
+      }
+    }
+  );
+
+  const openProcureModal = (type: 'PART' | 'SERVICE', item: any) => {
+    const defaultCost = type === 'PART'
+      ? (Number(item.quantity || 1) * Number(item.unit_price || 0))
+      : (Number(item.cost_price || 0) > 0 ? Number(item.cost_price) : Number(item.total_price || item.unit_price || 0));
+
+    setProcurementModal({ isOpen: true, type, item });
+    setProcureCost(String(defaultCost));
+    setProcureVendor(type === 'PART' ? '' : (item.vendor_name || ''));
+    setProcurePaymentMethod('CASH');
+    setProcureInvoiceRef('');
+    setProcureNotes('');
+  };
+
+  const handleProcureSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cost = parseFloat(procureCost);
+    if (isNaN(cost) || cost < 0) {
+      toast.error('Please enter a valid procurement cost');
+      return;
+    }
+
+    if (procurementModal.type === 'PART') {
+      procureSparePartMutation.mutate({
+        partId: procurementModal.item.id,
+        procuredCost: cost,
+        vendorName: procureVendor,
+        paymentMethod: procurePaymentMethod,
+        invoiceRef: procureInvoiceRef,
+        notes: procureNotes
+      });
+    } else {
+      procureServiceMutation.mutate({
+        serviceId: procurementModal.item.id,
+        procuredCost: cost,
+        vendorName: procureVendor,
+        paymentMethod: procurePaymentMethod,
+        invoiceRef: procureInvoiceRef,
+        notes: procureNotes
+      });
+    }
+  };
 
   const resetServiceForm = () => {
     setEditingService(null);
@@ -806,7 +971,7 @@ const JobCardDetails: React.FC = () => {
             <span>Print Job Card</span>
           </button>
 
-          {/* Convert to Invoice Button */}
+          {/* Convert to Invoice or Revert Button */}
           {jobCard.status !== 'INVOICED' ? (
             <button
               onClick={() => setShowInvoiceModal(true)}
@@ -817,15 +982,35 @@ const JobCardDetails: React.FC = () => {
               <span>⚡ Convert to Invoice</span>
             </button>
           ) : (
-            <Link
-              to={`/bills/${jobCard.bill_id}`}
-              className="btn bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 text-xs py-2 px-3.5 shadow-sm"
-            >
-              <FileText className="h-4 w-4" />
-              <span>View Bill #{jobCard.bill_number}</span>
-              <ExternalLink className="h-3.5 w-3.5 ml-1" />
-            </Link>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowRevertModal(true)}
+                className="btn bg-amber-600 hover:bg-amber-700 text-white flex items-center gap-1.5 text-xs py-2 px-3 shadow-sm font-semibold"
+                title="Revert back to Vehicle Repairs in Progress, void invoice, and restore stock"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>↺ Revert to In-Progress</span>
+              </button>
+              <Link
+                to={`/bills/${jobCard.bill_id}`}
+                className="btn bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 text-xs py-2 px-3.5 shadow-sm"
+              >
+                <FileText className="h-4 w-4" />
+                <span>View Bill #{jobCard.bill_number}</span>
+                <ExternalLink className="h-3.5 w-3.5 ml-1" />
+              </Link>
+            </div>
           )}
+
+          {/* Delete Job Card Button */}
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="btn bg-rose-600/10 hover:bg-rose-600/20 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60 flex items-center gap-1.5 text-xs py-2 px-2.5 shadow-sm transition-colors"
+            title="Permanently delete this Job Card"
+          >
+            <Trash2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Delete</span>
+          </button>
         </div>
       </div>
 
@@ -843,13 +1028,23 @@ const JobCardDetails: React.FC = () => {
               </p>
             </div>
           </div>
-          <Link
-            to={`/bills/${jobCard.bill_id}`}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition-colors whitespace-nowrap"
-          >
-            <span>Open Invoice</span>
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowRevertModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg bg-amber-600 text-white hover:bg-amber-700 shadow-sm transition-colors whitespace-nowrap"
+              title="Void invoice, restore parts stock, and continue editing job card"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span>↺ Revert to Repairs in Progress</span>
+            </button>
+            <Link
+              to={`/bills/${jobCard.bill_id}`}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition-colors whitespace-nowrap"
+            >
+              <span>Open Invoice</span>
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       )}
 
@@ -1277,6 +1472,7 @@ const JobCardDetails: React.FC = () => {
                   <th className="py-3 px-4 text-center">Qty / Jobs</th>
                   <th className="py-3 px-4 text-right">Billed Rate</th>
                   <th className="py-3 px-4 text-right">Total</th>
+                  <th className="py-3 px-4 text-left">Lab Procurement / Cash Outflow</th>
                   {!isLocked && <th className="py-3 px-4 text-center">Action</th>}
                 </tr>
               </thead>
@@ -1329,6 +1525,39 @@ const JobCardDetails: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-slate-100">
                       {formatCurrency(item.total_price)}
+                    </td>
+                    <td className="py-3 px-4">
+                      {item.is_procured ? (
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <span>Paid: {formatCurrency(item.procured_cost)}</span>
+                          </span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                            {item.procured_payment_method} · {item.procured_vendor || 'Lab'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => unprocureServiceMutation.mutate(item.id)}
+                            disabled={unprocureServiceMutation.isLoading}
+                            className="text-[10px] text-slate-400 hover:text-red-500 dark:hover:text-red-400 flex items-center gap-1 transition-colors underline"
+                            title="Reverse expense from Financial Ledger"
+                          >
+                            <Undo2 className="h-3 w-3" />
+                            <span>Cancel / Refund</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => openProcureModal('SERVICE', item)}
+                          className="btn btn-secondary text-[11px] py-1 px-2.5 flex items-center gap-1 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/60"
+                          title="Mark this sublet job as paid to external lab and reflect in Financial Ledger"
+                        >
+                          <CreditCard className="h-3.5 w-3.5 text-indigo-500" />
+                          <span>Mark Procured</span>
+                        </button>
+                      )}
                     </td>
                     {!isLocked && (
                       <td className="py-3 px-4 text-center">
@@ -1422,6 +1651,7 @@ const JobCardDetails: React.FC = () => {
                   <th className="py-3 px-4 text-center">Quantity</th>
                   <th className="py-3 px-4 text-right">Unit Price</th>
                   <th className="py-3 px-4 text-right">Total</th>
+                  <th className="py-3 px-4 text-left">Parts Procurement / Cash Outflow</th>
                   {!isLocked && <th className="py-3 px-4 text-center">Action</th>}
                 </tr>
               </thead>
@@ -1466,6 +1696,39 @@ const JobCardDetails: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-slate-100">
                       {formatCurrency(item.total_price)}
+                    </td>
+                    <td className="py-3 px-4">
+                      {item.is_procured ? (
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <span>Procured: {formatCurrency(item.procured_cost)}</span>
+                          </span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                            {item.procured_payment_method} · {item.procured_vendor || 'Distributor'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => unprocureSparePartMutation.mutate(item.id)}
+                            disabled={unprocureSparePartMutation.isLoading}
+                            className="text-[10px] text-slate-400 hover:text-red-500 dark:hover:text-red-400 flex items-center gap-1 transition-colors underline"
+                            title="Reverse expense from Financial Ledger"
+                          >
+                            <Undo2 className="h-3 w-3" />
+                            <span>Cancel / Refund</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => openProcureModal('PART', item)}
+                          className="btn btn-secondary text-[11px] py-1 px-2.5 flex items-center gap-1 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/60"
+                          title="Record actual procurement cost in Financial Management cash flow"
+                        >
+                          <CreditCard className="h-3.5 w-3.5 text-emerald-500" />
+                          <span>Mark Procured</span>
+                        </button>
+                      )}
                     </td>
                     {!isLocked && (
                       <td className="py-3 px-4 text-center">
@@ -1612,6 +1875,20 @@ const JobCardDetails: React.FC = () => {
               >
                 <span>Convert to Invoice</span>
                 <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
+          {jobCard.status === 'INVOICED' && (
+            <div className="pt-4 border-t border-gray-100 dark:border-slate-800 space-y-2">
+              <span className="text-[11px] text-slate-500 block">Need to edit items, add more work, or correct the invoice?</span>
+              <button
+                onClick={() => setShowRevertModal(true)}
+                className="btn w-full bg-amber-600 hover:bg-amber-700 text-white text-xs py-2 px-3 flex items-center justify-center gap-1.5 shadow-sm font-semibold"
+                title="Void invoice, restore parts stock, and return to Repairs in Progress"
+              >
+                <RotateCcw className="h-4 w-4" />
+                <span>↺ Revert to Repairs in Progress</span>
               </button>
             </div>
           )}
@@ -3038,6 +3315,277 @@ const JobCardDetails: React.FC = () => {
                   className="btn btn-primary text-xs"
                 >
                   {updateTechsMutation.isLoading ? 'Saving...' : 'Save Technicians'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: MARK ITEM AS PROCURED / RECORD OPEX CASH OUTFLOW                */}
+      {/* ========================================================================= */}
+      {procurementModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-[#0e1424] border border-gray-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-base">
+                <CreditCard className="h-5 w-5" />
+                <span>
+                  {procurementModal.type === 'PART'
+                    ? 'Mark Spare Part as Procured'
+                    : 'Mark Sublet Service as Paid to Lab'}
+                </span>
+              </div>
+              <button
+                onClick={() => setProcurementModal({ isOpen: false, type: 'PART', item: null })}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleProcureSubmit} className="p-5 space-y-4">
+              {/* Item Summary Card */}
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-gray-200 dark:border-slate-800 text-xs space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-gray-900 dark:text-slate-100 text-sm">
+                    {procurementModal.item?.part_name || procurementModal.item?.service_name}
+                  </span>
+                  <span className="text-primary-600 dark:text-primary-400 font-semibold">
+                    Customer Billed: {formatCurrency(procurementModal.item?.total_price)}
+                  </span>
+                </div>
+                {procurementModal.type === 'PART' ? (
+                  <p className="text-slate-500">
+                    Quantity: {formatQuantity(procurementModal.item?.quantity)} {procurementModal.item?.unit || 'pieces'}
+                    {procurementModal.item?.part_number && ` · PN: ${procurementModal.item?.part_number}`}
+                  </p>
+                ) : (
+                  <p className="text-slate-500">
+                    Vendor/Lab: {procurementModal.item?.vendor_name || 'Specialist Lab'} · Jobs: {formatQuantity(procurementModal.item?.hours_qty)}
+                  </p>
+                )}
+              </div>
+
+              <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-xl p-3 text-xs text-emerald-800 dark:text-emerald-300">
+                💡 Marking this item as procured will automatically log an operating outflow in your <strong>Financial Management Expense Ledger</strong> and deduct this cost from your <strong>Total All-Time Remaining Cash In-Hand / Bank Balance</strong>.
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Procurement Outflow Cost (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={procureCost}
+                    onChange={(e) => setProcureCost(e.target.value)}
+                    placeholder="0.00"
+                    className="input w-full text-xs font-mono font-bold"
+                  />
+                  <span className="text-[10px] text-slate-400">Actual amount paid by the garage</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Payment Method *
+                  </label>
+                  <select
+                    value={procurePaymentMethod}
+                    onChange={(e) => setProcurePaymentMethod(e.target.value as any)}
+                    className="input w-full text-xs"
+                  >
+                    <option value="CASH">Cash</option>
+                    <option value="UPI">UPI (GPay / PhonePe / Paytm)</option>
+                    <option value="BANK_TRANSFER">Bank Transfer / NEFT</option>
+                    <option value="CARD">Debit / Credit Card</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    {procurementModal.type === 'PART' ? 'Distributor / Parts Supplier' : 'Specialist Lab / Workshop'}
+                  </label>
+                  <input
+                    type="text"
+                    value={procureVendor}
+                    onChange={(e) => setProcureVendor(e.target.value)}
+                    placeholder={procurementModal.type === 'PART' ? 'e.g. Bosch Authorized Distributor' : 'e.g. Precision Lathe & Injector Lab'}
+                    className="input w-full text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Supplier Invoice / Receipt #
+                  </label>
+                  <input
+                    type="text"
+                    value={procureInvoiceRef}
+                    onChange={(e) => setProcureInvoiceRef(e.target.value)}
+                    placeholder="e.g. INV-2026-9921"
+                    className="input w-full text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Procurement Notes (Optional)
+                </label>
+                <textarea
+                  value={procureNotes}
+                  onChange={(e) => setProcureNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Add any receipt details or warranty notes..."
+                  className="input w-full text-xs"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 dark:border-slate-800 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setProcurementModal({ isOpen: false, type: 'PART', item: null })}
+                  className="btn btn-secondary text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={procureSparePartMutation.isLoading || procureServiceMutation.isLoading}
+                  className="btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs flex items-center gap-1.5 font-bold"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>
+                    {procureSparePartMutation.isLoading || procureServiceMutation.isLoading
+                      ? 'Recording Expense...'
+                      : 'Confirm & Record in Finance'}
+                  </span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 5: REVERT INVOICED JOB CARD BACK TO REPAIRS IN PROGRESS              */}
+      {/* ========================================================================= */}
+      {showRevertModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-[#0e1424] border border-gray-200 dark:border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-bold text-base">
+                <RotateCcw className="h-5 w-5" />
+                <span>Revert to Repairs in Progress</span>
+              </div>
+              <button
+                onClick={() => setShowRevertModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                  <span>Are you sure you want to revert this Job Card?</span>
+                </div>
+                <p>
+                  This action will move this Job Card back into active workshop status so you can continue editing:
+                </p>
+                <ul className="list-disc list-inside space-y-1 pl-1 text-[11px]">
+                  <li>Linked Invoice <strong>#{jobCard.bill_number}</strong> will be voided and deleted.</li>
+                  <li>All spare parts deducted from stock will be <strong>restored back to inventory</strong>.</li>
+                  <li>Job Card status will become <strong>IN_PROGRESS</strong>, unlocking all editing.</li>
+                </ul>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRevertModal(false)}
+                  className="btn btn-secondary text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => revertInvoiceMutation.mutate()}
+                  disabled={revertInvoiceMutation.isLoading}
+                  className="btn bg-amber-600 hover:bg-amber-700 text-white text-xs flex items-center gap-1.5 font-bold"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  <span>{revertInvoiceMutation.isLoading ? 'Reverting...' : 'Confirm & Revert to In-Progress'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 6: PERMANENTLY DELETE JOB CARD                                      */}
+      {/* ========================================================================= */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-[#0e1424] border border-gray-200 dark:border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold text-base">
+                <Trash2 className="h-5 w-5" />
+                <span>Delete Job Card</span>
+              </div>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-900 dark:text-rose-200 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0" />
+                  <span>Permanently delete Job Card #{jobCard.job_card_number}?</span>
+                </div>
+                <p>This action is irreversible:</p>
+                <ul className="list-disc list-inside space-y-1 pl-1 text-[11px]">
+                  {jobCard.bill_id && (
+                    <>
+                      <li>Linked invoice #{jobCard.bill_number} will be deleted.</li>
+                      <li>Deducted spare parts will be restored to inventory stock.</li>
+                    </>
+                  )}
+                  <li>Any linked procurement expense records in Financial Management will be cleaned up.</li>
+                  <li>All associated labor records, sublet services, and checklists will be permanently removed.</li>
+                </ul>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(false)}
+                  className="btn btn-secondary text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => deleteJobCardMutation.mutate()}
+                  disabled={deleteJobCardMutation.isLoading}
+                  className="btn bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center gap-1.5 font-bold"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>{deleteJobCardMutation.isLoading ? 'Deleting...' : 'Delete Job Card Permanently'}</span>
                 </button>
               </div>
             </div>
