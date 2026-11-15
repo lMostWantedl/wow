@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { financialService } from '../services/financial';
@@ -305,6 +305,18 @@ const Financial: React.FC = () => {
         endDate: expenseEndDate || undefined,
       }),
     { enabled: canAccessFinancial }
+  );
+
+  // 4b. Dedicated Workshop Physical Capital Assets (CapEx) Query
+  const { data: capexAssetsData, isLoading: isCapexLoading } = useQuery(
+    ['garage-expenses', 'capex-register'],
+    () =>
+      financialService.getExpenses({
+        page: 1,
+        limit: 200,
+        expenseType: 'CAPEX',
+      }),
+    { enabled: canAccessFinancial && canViewCost }
   );
 
   // 5. Salaries Summary Query
@@ -633,6 +645,9 @@ const Financial: React.FC = () => {
     }
   };
 
+  // Memoized Workshop Capital Assets (CapEx Deployed)
+  const capexAssets = useMemo(() => capexAssetsData?.expenses || [], [capexAssetsData]);
+
   // Financial Balance Calculations (Initial Capital + Net Profit - CapEx Setup)
   const totalCapitalInvested = financialData?.summary.allTimeInvestments ?? investmentsData?.totalInvested ?? 0;
   const allTimeCapEx = financialData?.summary.allTimeCapex ?? 0;
@@ -811,6 +826,11 @@ const Financial: React.FC = () => {
                 {investmentsData.investments.length} inv
               </span>
             ) : null}
+            {capexAssets.length > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-950/80 text-cyan-700 dark:text-cyan-300 font-mono">
+                {capexAssets.length} assets
+              </span>
+            )}
           </button>
         )}
       </div>
@@ -2837,43 +2857,73 @@ const Financial: React.FC = () => {
             {/* CapEx Asset Categories Breakdown */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
-                    <Building2 className="h-5 w-5" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
+                      <Building2 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-gray-900 dark:text-slate-100">Garage Setup & Civil Bays</h4>
+                      <p className="text-[11px] text-gray-500 dark:text-slate-400">Flooring, structural bays, signboards</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-gray-900 dark:text-slate-100">Garage Setup & Civil Bays</h4>
-                    <p className="text-[11px] text-gray-500 dark:text-slate-400">Flooring, structural bays, signboards</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-lg bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400">
-                    <Wrench className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-gray-900 dark:text-slate-100">Car Lifts & Compressors</h4>
-                    <p className="text-[11px] text-gray-500 dark:text-slate-400">Hydraulic 2-post lifts, screw compressors</p>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                      {formatCurrency(capexAssets.filter((a) => a.category === 'GARAGE_SETUP').reduce((s, a) => s + Number(a.amount || 0), 0))}
+                    </p>
+                    <p className="text-[10px] text-gray-400 font-mono">
+                      {capexAssets.filter((a) => a.category === 'GARAGE_SETUP').length} assets
+                    </p>
                   </div>
                 </div>
               </div>
 
               <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400">
-                    <Layers className="h-5 w-5" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-lg bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400">
+                      <Wrench className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-gray-900 dark:text-slate-100">Car Lifts & Compressors</h4>
+                      <p className="text-[11px] text-gray-500 dark:text-slate-400">Hydraulic 2-post lifts, screw compressors</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-gray-900 dark:text-slate-100">Diagnostic & Pro Scanners</h4>
-                    <p className="text-[11px] text-gray-500 dark:text-slate-400">OBD-II scanners, ECU flashes, battery testers</p>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-cyan-600 dark:text-cyan-400 font-mono">
+                      {formatCurrency(capexAssets.filter((a) => a.category === 'TOOLS_EQUIPMENT').reduce((s, a) => s + Number(a.amount || 0), 0))}
+                    </p>
+                    <p className="text-[10px] text-gray-400 font-mono">
+                      {capexAssets.filter((a) => a.category === 'TOOLS_EQUIPMENT').length} assets
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400">
+                      <Layers className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-gray-900 dark:text-slate-100">Diagnostic & Pro Machinery</h4>
+                      <p className="text-[11px] text-gray-500 dark:text-slate-400">OBD scanners, testing tools & other</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-purple-600 dark:text-purple-400 font-mono">
+                      {formatCurrency(capexAssets.filter((a) => a.category !== 'GARAGE_SETUP' && a.category !== 'TOOLS_EQUIPMENT').reduce((s, a) => s + Number(a.amount || 0), 0))}
+                    </p>
+                    <p className="text-[10px] text-gray-400 font-mono">
+                      {capexAssets.filter((a) => a.category !== 'GARAGE_SETUP' && a.category !== 'TOOLS_EQUIPMENT').length} assets
+                    </p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* CapEx Assets Table (Filtered from expensesData where expense_type === 'CAPEX') */}
+            {/* CapEx Assets Table (Dedicated Workshop Capital Asset Register) */}
             <div className="card overflow-hidden bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-800">
@@ -2908,7 +2958,14 @@ const Financial: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-slate-800 text-xs">
-                    {(expensesData?.expenses || []).filter((e) => e.expense_type === 'CAPEX').length === 0 ? (
+                    {isCapexLoading ? (
+                      <tr>
+                        <td colSpan={canManageFinances ? 8 : 7} className="text-center py-10">
+                          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                          <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">Loading workshop capital assets...</p>
+                        </td>
+                      </tr>
+                    ) : capexAssets.length === 0 ? (
                       <tr>
                         <td colSpan={canManageFinances ? 8 : 7} className="text-center py-8 text-gray-500 dark:text-slate-400">
                           <Wrench className="h-8 w-8 mx-auto text-gray-400 mb-2" />
@@ -2919,9 +2976,7 @@ const Financial: React.FC = () => {
                         </td>
                       </tr>
                     ) : (
-                      (expensesData?.expenses || [])
-                        .filter((e) => e.expense_type === 'CAPEX')
-                        .map((asset) => {
+                      capexAssets.map((asset) => {
                         const catConfig = CATEGORY_CONFIG[asset.category] || CATEGORY_CONFIG.GARAGE_SETUP;
                         return (
                           <tr key={asset.id} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/40">
@@ -2951,7 +3006,7 @@ const Financial: React.FC = () => {
                               {asset.invoice_reference || '—'}
                             </td>
                             <td className="px-4 py-3 text-right font-bold text-sm text-purple-600 dark:text-purple-400 font-mono">
-                              {renderMaskedCurrency(asset.amount, canViewCost)}
+                              {formatCurrency(asset.amount)}
                             </td>
                             {canManageFinances && (
                               <td className="px-4 py-3 text-right">

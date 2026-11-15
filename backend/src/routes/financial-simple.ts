@@ -541,7 +541,7 @@ router.get('/daily', requireRoleOrScope(['MANAGER'], ['financial', 'view_custome
 router.get('/expenses', requireRoleOrScope(['MANAGER'], ['financial', 'view_customer_retail', 'view_garage_cost']), async (req: AuthRequest, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit as string) || 15));
+    const limit = Math.max(1, Math.min(500, parseInt(req.query.limit as string) || 15));
     const offset = (page - 1) * limit;
 
     const {
