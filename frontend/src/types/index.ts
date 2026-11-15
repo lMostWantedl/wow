@@ -323,6 +323,7 @@ export interface GarageExpense {
   notes?: string;
   customer_retail_price?: number;
   linked_job_card_number?: string;
+  is_job_procurement?: boolean;
   is_recurring: boolean;
   recurring_frequency?: string;
   created_by?: string;
@@ -350,6 +351,12 @@ export interface ExpenseTotals {
   totalAmount: number;
   opexAmount: number;
   capexAmount: number;
+  garageAmount?: number;
+  garageCount?: number;
+  jobProcurementAmount?: number;
+  jobCount?: number;
+  jobRetailAmount?: number;
+  jobGrossMargin?: number;
 }
 
 export interface ExpensesListResponse {

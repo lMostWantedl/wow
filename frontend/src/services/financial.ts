@@ -61,12 +61,15 @@ export interface ProfitLossResponse {
   bills?: any[];
 }
 
+export type ExpenseOrigin = 'ALL' | 'GARAGE' | 'JOB_CARDS';
+
 export interface ExpenseQueryParams {
   page?: number;
   limit?: number;
   search?: string;
   category?: ExpenseCategory | 'ALL';
   expenseType?: ExpenseType | 'ALL';
+  origin?: ExpenseOrigin;
   startDate?: string;
   endDate?: string;
 }

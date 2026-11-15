@@ -548,55 +548,62 @@ router.get('/expenses', requireRoleOrScope(['MANAGER'], ['financial', 'view_cust
       search = '',
       category = 'ALL',
       expenseType = 'ALL',
+      origin = 'ALL',
       startDate,
       endDate
     } = req.query;
 
-    let queryText = `
-      SELECT ge.*, u.name as staff_name, u.role as staff_role,
-        COALESCE(jcsp.total_price, jcs.total_price) as customer_retail_price,
-        COALESCE(jc1.job_card_number, jc2.job_card_number) as linked_job_card_number
+    const fromAndJoins = `
       FROM garage_expenses ge
       LEFT JOIN users u ON ge.user_id = u.id
       LEFT JOIN job_card_spare_parts jcsp ON jcsp.procurement_expense_id = ge.id
       LEFT JOIN job_cards jc1 ON jcsp.job_card_id = jc1.id
       LEFT JOIN job_card_services jcs ON jcs.procurement_expense_id = ge.id
       LEFT JOIN job_cards jc2 ON jcs.job_card_id = jc2.id
-      WHERE 1=1
     `;
+
+    let whereClause = `WHERE 1=1`;
     const queryParams: any[] = [];
     let paramIndex = 1;
 
     if (category && category !== 'ALL') {
-      queryText += ` AND ge.category = $${paramIndex}`;
+      whereClause += ` AND ge.category = $${paramIndex}`;
       queryParams.push(category);
       paramIndex++;
     }
 
     if (expenseType && expenseType !== 'ALL') {
-      queryText += ` AND ge.expense_type = $${paramIndex}`;
+      whereClause += ` AND ge.expense_type = $${paramIndex}`;
       queryParams.push(expenseType);
       paramIndex++;
     }
 
+    if (origin === 'GARAGE') {
+      whereClause += ` AND (ge.category NOT IN ('PARTS_PROCUREMENT', 'SUBLET_SERVICES') AND jcsp.id IS NULL AND jcs.id IS NULL)`;
+    } else if (origin === 'JOB_CARDS') {
+      whereClause += ` AND (ge.category IN ('PARTS_PROCUREMENT', 'SUBLET_SERVICES') OR jcsp.id IS NOT NULL OR jcs.id IS NOT NULL)`;
+    }
+
     if (startDate) {
-      queryText += ` AND ge.expense_date >= $${paramIndex}`;
+      whereClause += ` AND ge.expense_date >= $${paramIndex}`;
       queryParams.push(startDate);
       paramIndex++;
     }
 
     if (endDate) {
-      queryText += ` AND ge.expense_date <= $${paramIndex}`;
+      whereClause += ` AND ge.expense_date <= $${paramIndex}`;
       queryParams.push(endDate);
       paramIndex++;
     }
 
     if (search) {
-      queryText += ` AND (
+      whereClause += ` AND (
         ge.expense_number ILIKE $${paramIndex} OR
         ge.title ILIKE $${paramIndex} OR
         ge.payee_recipient ILIKE $${paramIndex} OR
-        ge.invoice_reference ILIKE $${paramIndex}
+        ge.invoice_reference ILIKE $${paramIndex} OR
+        jc1.job_card_number ILIKE $${paramIndex} OR
+        jc2.job_card_number ILIKE $${paramIndex}
       )`;
       queryParams.push(`%${search}%`);
       paramIndex++;
@@ -606,18 +613,31 @@ router.get('/expenses', requireRoleOrScope(['MANAGER'], ['financial', 'view_cust
     const totalResult = await query(
       `SELECT 
          COUNT(*) as total_count,
-         COALESCE(SUM(amount), 0) as total_amount,
-         COALESCE(SUM(CASE WHEN expense_type = 'OPEX' THEN amount ELSE 0 END), 0) as opex_amount,
-         COALESCE(SUM(CASE WHEN expense_type = 'CAPEX' THEN amount ELSE 0 END), 0) as capex_amount
-       FROM garage_expenses ge
-       WHERE 1=1 ${queryText.split('WHERE 1=1')[1]}`,
+         COALESCE(SUM(ge.amount), 0) as total_amount,
+         COALESCE(SUM(CASE WHEN ge.expense_type = 'OPEX' THEN ge.amount ELSE 0 END), 0) as opex_amount,
+         COALESCE(SUM(CASE WHEN ge.expense_type = 'CAPEX' THEN ge.amount ELSE 0 END), 0) as capex_amount,
+         COALESCE(SUM(CASE WHEN (ge.category NOT IN ('PARTS_PROCUREMENT', 'SUBLET_SERVICES') AND jcsp.id IS NULL AND jcs.id IS NULL) THEN ge.amount ELSE 0 END), 0) as garage_amount,
+         COUNT(CASE WHEN (ge.category NOT IN ('PARTS_PROCUREMENT', 'SUBLET_SERVICES') AND jcsp.id IS NULL AND jcs.id IS NULL) THEN 1 END) as garage_count,
+         COALESCE(SUM(CASE WHEN (ge.category IN ('PARTS_PROCUREMENT', 'SUBLET_SERVICES') OR jcsp.id IS NOT NULL OR jcs.id IS NOT NULL) THEN ge.amount ELSE 0 END), 0) as job_amount,
+         COUNT(CASE WHEN (ge.category IN ('PARTS_PROCUREMENT', 'SUBLET_SERVICES') OR jcsp.id IS NOT NULL OR jcs.id IS NOT NULL) THEN 1 END) as job_count,
+         COALESCE(SUM(CASE WHEN (ge.category IN ('PARTS_PROCUREMENT', 'SUBLET_SERVICES') OR jcsp.id IS NOT NULL OR jcs.id IS NOT NULL) THEN COALESCE(jcsp.total_price, jcs.total_price, 0) ELSE 0 END), 0) as job_retail_amount
+       ${fromAndJoins}
+       ${whereClause}`,
       queryParams
     );
 
-    queryText += ` ORDER BY ge.expense_date DESC, ge.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    queryParams.push(limit, offset);
+    const selectQueryText = `
+      SELECT ge.*, u.name as staff_name, u.role as staff_role,
+        COALESCE(jcsp.total_price, jcs.total_price) as customer_retail_price,
+        COALESCE(jc1.job_card_number, jc2.job_card_number) as linked_job_card_number
+      ${fromAndJoins}
+      ${whereClause}
+      ORDER BY ge.expense_date DESC, ge.created_at DESC
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
 
-    const result = await query(queryText, queryParams);
+    queryParams.push(limit, offset);
+    const result = await query(selectQueryText, queryParams);
 
     const totalCount = parseInt(totalResult.rows[0]?.total_count || '0', 10);
     const pages = Math.ceil(totalCount / limit) || 1;
@@ -627,6 +647,7 @@ router.get('/expenses', requireRoleOrScope(['MANAGER'], ['financial', 'view_cust
 
     const sanitizedExpenses = result.rows.map(exp => ({
       ...exp,
+      is_job_procurement: exp.category === 'PARTS_PROCUREMENT' || exp.category === 'SUBLET_SERVICES' || exp.linked_job_card_number != null,
       amount: allowCost ? exp.amount : null,
       customer_retail_price: allowRetail ? exp.customer_retail_price : null
     }));
@@ -637,7 +658,15 @@ router.get('/expenses', requireRoleOrScope(['MANAGER'], ['financial', 'view_cust
         count: totalCount,
         totalAmount: allowCost ? parseFloat(totalResult.rows[0]?.total_amount || '0') : null,
         opexAmount: allowCost ? parseFloat(totalResult.rows[0]?.opex_amount || '0') : null,
-        capexAmount: allowCost ? parseFloat(totalResult.rows[0]?.capex_amount || '0') : null
+        capexAmount: allowCost ? parseFloat(totalResult.rows[0]?.capex_amount || '0') : null,
+        garageAmount: allowCost ? parseFloat(totalResult.rows[0]?.garage_amount || '0') : null,
+        garageCount: parseInt(totalResult.rows[0]?.garage_count || '0', 10),
+        jobProcurementAmount: allowCost ? parseFloat(totalResult.rows[0]?.job_amount || '0') : null,
+        jobCount: parseInt(totalResult.rows[0]?.job_count || '0', 10),
+        jobRetailAmount: allowRetail ? parseFloat(totalResult.rows[0]?.job_retail_amount || '0') : null,
+        jobGrossMargin: allowRetail && allowCost
+          ? (parseFloat(totalResult.rows[0]?.job_retail_amount || '0') - parseFloat(totalResult.rows[0]?.job_amount || '0'))
+          : null
       },
       pagination: {
         page,

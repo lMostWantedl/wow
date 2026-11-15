@@ -39,7 +39,11 @@ import {
   Landmark,
   Package,
   ExternalLink,
+  Columns,
+  Receipt,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ExpenseOrigin } from '../services/financial';
 import {
   XAxis,
   YAxis,
@@ -225,6 +229,10 @@ const Financial: React.FC = () => {
   // Navigation tab: 'overview' | 'expenses' | 'salaries' | 'capex'
   const [activeTab, setActiveTab] = useState<'overview' | 'expenses' | 'salaries' | 'capex'>('overview');
 
+  // Perspective Views for Separation of Garage vs Repairs
+  const [overviewPerspective, setOverviewPerspective] = useState<'COMBINED' | 'GARAGE' | 'REPAIRS'>('COMBINED');
+  const [expenseOriginFilter, setExpenseOriginFilter] = useState<'SPLIT' | 'COMBINED' | 'GARAGE' | 'JOB_CARDS'>('SPLIT');
+
   // Remaining Balance View Mode: 'lifetime' (All-Time from inception) | 'period' (Active Date Filter)
   const [balanceViewMode, setBalanceViewMode] = useState<'lifetime' | 'period'>('lifetime');
 
@@ -291,21 +299,28 @@ const Financial: React.FC = () => {
     { enabled: canAccessFinancial }
   );
 
-  // 4. Expenses Ledger Query
+  // 4. Expenses Ledger Query (Supports Split, Combined, Garage Overhead, and Job Procurements)
+  const queryOrigin: ExpenseOrigin = (expenseOriginFilter === 'SPLIT' || expenseOriginFilter === 'COMBINED') ? 'ALL' : expenseOriginFilter;
   const { data: expensesData, isLoading: isExpensesLoading } = useQuery(
-    ['garage-expenses', page, expenseSearch, categoryFilter, typeFilter, expenseStartDate, expenseEndDate],
+    ['garage-expenses', page, expenseSearch, categoryFilter, typeFilter, queryOrigin, expenseStartDate, expenseEndDate, expenseOriginFilter],
     () =>
       financialService.getExpenses({
         page,
-        limit: 15,
+        limit: expenseOriginFilter === 'SPLIT' ? 100 : 15,
         search: expenseSearch,
         category: categoryFilter,
         expenseType: typeFilter,
+        origin: queryOrigin,
         startDate: expenseStartDate || undefined,
         endDate: expenseEndDate || undefined,
       }),
     { enabled: canAccessFinancial }
   );
+
+  // Split-view derived lists
+  const allExpensesList = useMemo(() => expensesData?.expenses || [], [expensesData]);
+  const garageOnlyExpenses = useMemo(() => allExpensesList.filter((e) => !e.is_job_procurement), [allExpensesList]);
+  const jobProcurementExpenses = useMemo(() => allExpensesList.filter((e) => e.is_job_procurement), [allExpensesList]);
 
   // 4b. Dedicated Workshop Physical Capital Assets (CapEx) Query
   const { data: capexAssetsData, isLoading: isCapexLoading } = useQuery(
@@ -840,6 +855,391 @@ const Financial: React.FC = () => {
       {/* ========================================================================= */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
+        {/* FINANCIAL PERSPECTIVE SWITCHER */}
+        <div className="card p-3 sm:p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-lg bg-primary-50 dark:bg-primary-950/70 text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800/60">
+                <PieChartIcon className="h-4 w-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-slate-200">
+                  Financial Analysis Perspective
+                </h4>
+                <p className="text-[11px] text-gray-500 dark:text-slate-400">
+                  View combined business performance, garage setup & capital, or customer repairs billing separately
+                </p>
+              </div>
+            </div>
+
+            <div className="inline-flex bg-gray-100 dark:bg-slate-900/90 p-1 rounded-xl border border-gray-200 dark:border-slate-800 text-xs font-semibold self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setOverviewPerspective('COMBINED')}
+                className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+                  overviewPerspective === 'COMBINED'
+                    ? 'bg-primary-600 text-white shadow-xs'
+                    : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                <Layers className="h-3.5 w-3.5" />
+                <span>Combined Master P&L</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setOverviewPerspective('GARAGE')}
+                className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+                  overviewPerspective === 'GARAGE'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                <Building2 className="h-3.5 w-3.5" />
+                <span>Garage Investments & Overhead</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setOverviewPerspective('REPAIRS')}
+                className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+                  overviewPerspective === 'REPAIRS'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                <Wrench className="h-3.5 w-3.5" />
+                <span>Customer Repairs & Billing</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* PERSPECTIVE: GARAGE INVESTMENTS, SETUP & OPERATIONAL OVERHEAD */}
+        {/* ========================================================================= */}
+        {overviewPerspective === 'GARAGE' && canViewCost && (
+          <div className="space-y-6">
+            {/* Garage Setup & Assets Dedicated Hero Card */}
+            <div className="p-5 sm:p-6 rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-950/40 via-slate-900/95 to-slate-950 shadow-md">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
+                <div className="flex items-start sm:items-center gap-3.5">
+                  <div className="p-3 rounded-2xl border bg-purple-500/15 text-purple-400 border-purple-500/30">
+                    <Building2 className="h-7 w-7" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-purple-300">
+                        Garage Setup & Capital Position (CapEx Isolated)
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-950/80 text-purple-300 border border-purple-800">
+                        Garage Infrastructure Only
+                      </span>
+                    </div>
+                    <h3 className="text-sm font-semibold text-slate-300 mt-0.5">
+                      Net Remaining Balance = Total Capital Invested − Workshop CapEx Setup
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Strictly reflects garage capital investments and fixed asset procurement. Customer vehicle repair bills and direct parts are excluded.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => handleOpenAddInvestmentModal()}
+                    className="btn btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>+ Add Investment</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('capex')}
+                    className="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
+                  >
+                    <span>CapEx Register</span>
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Big Stat Display for Garage Setup */}
+              <div className="py-5">
+                <p className="text-xs font-medium text-slate-400">
+                  Net Remaining Garage Setup & Infrastructure Capital
+                </p>
+                <div className="flex items-baseline gap-3 mt-1">
+                  <p className={`text-3xl sm:text-4xl lg:text-5xl font-extrabold font-mono tracking-tight ${isCapexSurplus ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {renderMaskedCurrency(capexRemainingBalance, canViewCost, true)}
+                  </p>
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-md uppercase tracking-wider ${isCapexSurplus ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60' : 'bg-red-950/60 text-red-300 border border-red-800/60'}`}>
+                    {isCapexSurplus ? 'Setup Capital Surplus' : 'Setup Capital Deficit'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Formula Breakdown Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-stretch pt-4 border-t border-slate-800/80">
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-purple-800/40">
+                  <div className="flex items-center justify-between text-xs text-purple-300 font-medium">
+                    <span>1. Total Capital Invested</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-950/80 text-purple-300 border border-purple-800/60 font-mono">
+                      + INFLOW
+                    </span>
+                  </div>
+                  <p className="text-xl font-bold text-white font-mono mt-1">
+                    +{renderMaskedCurrency(totalCapitalInvested, canViewCost)}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Founders, equity partners & loans</p>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-indigo-800/40">
+                  <div className="flex items-center justify-between text-xs text-indigo-300 font-medium">
+                    <span>2. Workshop CapEx Assets Deployed</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 font-mono">
+                      - OUTFLOW
+                    </span>
+                  </div>
+                  <p className="text-xl font-bold text-indigo-300 font-mono mt-1">
+                    -{renderMaskedCurrency(allTimeCapEx, canViewCost)}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Hydraulic car lifts, machinery, civil bays</p>
+                </div>
+
+                <div className={`p-3.5 rounded-xl border ${isCapexSurplus ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300' : 'bg-red-950/40 border-red-500/50 text-red-300'}`}>
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <span>= Net Setup Balance</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded border font-mono uppercase">
+                      {isCapexSurplus ? 'SURPLUS' : 'DEFICIT'}
+                    </span>
+                  </div>
+                  <p className={`text-xl font-extrabold font-mono mt-1 ${isCapexSurplus ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {renderMaskedCurrency(capexRemainingBalance, canViewCost, true)}
+                  </p>
+                  <p className="text-[11px] text-slate-300 mt-0.5">Isolated garage infrastructure reserve</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Running Operational Overhead for the Garage */}
+            <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+              <div className="flex items-center justify-between pb-4 border-b border-gray-100 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Briefcase className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  <h3 className="font-bold text-gray-900 dark:text-white text-base">
+                    Garage Operating Overhead & Fixed Expenses
+                  </h3>
+                </div>
+                <span className="text-xs text-gray-500 dark:text-slate-400">
+                  Workshop Rent, Staff Payroll, Utilities & Maintenance
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+                <div className="p-4 rounded-xl bg-gray-50 dark:bg-slate-900/70 border border-gray-200 dark:border-slate-800">
+                  <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">Workshop Operational Expenses (OpEx)</p>
+                  <p className="text-2xl font-bold text-red-600 dark:text-red-400 font-mono mt-1">
+                    {formatCurrency(financialData?.summary?.opex)}
+                  </p>
+                  <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-1">
+                    Active period filtered outflows
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl bg-gray-50 dark:bg-slate-900/70 border border-gray-200 dark:border-slate-800">
+                  <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">Total Capital Invested (All-Time)</p>
+                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-400 font-mono mt-1">
+                    +{formatCurrency(totalCapitalInvested)}
+                  </p>
+                  <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-1">
+                    Initial founding and equity injections
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl bg-gray-50 dark:bg-slate-900/70 border border-gray-200 dark:border-slate-800">
+                  <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">Fixed Capital Assets Valuation</p>
+                  <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 font-mono mt-1">
+                    {formatCurrency(allTimeCapEx)}
+                  </p>
+                  <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-1">
+                    Total physical workshop equipment
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 flex items-center justify-end gap-3">
+                <button
+                  onClick={() => { setActiveTab('expenses'); setExpenseOriginFilter('GARAGE'); }}
+                  className="btn btn-secondary text-xs py-2 px-3 flex items-center gap-1.5"
+                >
+                  <span>View Garage Overhead Ledger</span>
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => setActiveTab('capex')}
+                  className="btn btn-primary text-xs py-2 px-3 flex items-center gap-1.5"
+                >
+                  <span>Open CapEx & Investment Suite</span>
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* PERSPECTIVE: CUSTOMER REPAIRS & BILLINGS */}
+        {/* ========================================================================= */}
+        {overviewPerspective === 'REPAIRS' && (
+          <div className="space-y-6">
+            {/* Customer Repairs Performance Card */}
+            <div className="p-5 sm:p-6 rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/40 via-slate-900/95 to-slate-950 shadow-md">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
+                <div className="flex items-start sm:items-center gap-3.5">
+                  <div className="p-3 rounded-2xl border bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
+                    <Wrench className="h-7 w-7" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                        Customer Vehicle Repairs & Service Billing
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-800">
+                        Direct Job Cards & Invoices
+                      </span>
+                    </div>
+                    <h3 className="text-sm font-semibold text-slate-300 mt-0.5">
+                      Gross Repair Margin = Total Invoiced Revenue − Direct Sourced Parts & Sublets Cost
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Calculates direct margins earned from vehicle repairs, spare parts markups, and sublet margins. Excludes garage fixed rent and civil bays.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    to="/job-cards"
+                    className="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-sm"
+                  >
+                    <span>Job Cards Module</span>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
+                  <Link
+                    to="/bills"
+                    className="btn btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-sm"
+                  >
+                    <span>Customer Bills</span>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              </div>
+
+              {/* Big Stat Display for Repairs */}
+              <div className="py-5">
+                <p className="text-xs font-medium text-slate-400">
+                  Gross Repair Billing Margin (Customer Revenue − Direct Wholesale Cost)
+                </p>
+                <div className="flex items-baseline gap-3 mt-1">
+                  <p className="text-3xl sm:text-4xl lg:text-5xl font-extrabold font-mono tracking-tight text-emerald-400">
+                    {canViewBoth ? (
+                      formatCurrency((financialData?.summary?.totalRevenue || 0) - (financialData?.summary?.cogs || 0), true)
+                    ) : canViewRetail ? (
+                      formatCurrency(financialData?.summary?.totalRevenue)
+                    ) : (
+                      '—'
+                    )}
+                  </p>
+                  {canViewBoth && (
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-md uppercase tracking-wider bg-emerald-950/60 text-emerald-300 border border-emerald-800/60">
+                      Operating Margin
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Formula Breakdown Cards for Repairs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-stretch pt-4 border-t border-slate-800/80">
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-emerald-800/40">
+                  <div className="flex items-center justify-between text-xs text-emerald-300 font-medium">
+                    <span>1. Customer Invoiced Revenue</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 font-mono">
+                      BILLED
+                    </span>
+                  </div>
+                  <p className="text-xl font-bold text-white font-mono mt-1">
+                    {canViewRetail ? formatCurrency(financialData?.summary?.totalRevenue) : '—'}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Labor ({canViewRetail ? formatCurrency(financialData?.summary?.laborRevenue) : '—'}) + Parts ({canViewRetail ? formatCurrency(financialData?.summary?.partsRevenue) : '—'})
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-blue-800/40">
+                  <div className="flex items-center justify-between text-xs text-blue-300 font-medium">
+                    <span>2. Direct Job Procurements Cost</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-950/80 text-blue-300 border border-blue-800/60 font-mono">
+                      COST OF GOODS
+                    </span>
+                  </div>
+                  <p className="text-xl font-bold text-blue-300 font-mono mt-1">
+                    {canViewCost ? formatCurrency(financialData?.summary?.cogs) : '—'}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Wholesale parts & specialist sublets</p>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-emerald-800/40">
+                  <div className="flex items-center justify-between text-xs text-emerald-300 font-medium">
+                    <span>3. Invoiced Jobs Count</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 font-mono">
+                      INVOICES
+                    </span>
+                  </div>
+                  <p className="text-xl font-bold text-emerald-300 font-mono mt-1">
+                    {financialData?.summary?.totalBills || 0} bills
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Completed & billed job cards</p>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-emerald-800/40">
+                  <div className="flex items-center justify-between text-xs text-emerald-300 font-medium">
+                    <span>4. Customer Payments Collected</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 font-mono">
+                      COLLECTIONS
+                    </span>
+                  </div>
+                  <p className="text-xl font-bold text-emerald-400 font-mono mt-1">
+                    {canViewRetail ? formatCurrency(financialData?.summary?.paidRevenue) : '—'}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Cash, UPI & bank receipts</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick links to see procurements in Tab 2 */}
+            <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div>
+                <h4 className="font-bold text-gray-900 dark:text-white text-sm">
+                  Inspect Sourced Vehicle Parts & Specialist Sublet Invoices
+                </h4>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                  View individual spare parts wholesale cost, retail prices billed to vehicle owners, and sublet lab vendor invoices.
+                </p>
+              </div>
+              <button
+                onClick={() => { setActiveTab('expenses'); setExpenseOriginFilter('JOB_CARDS'); }}
+                className="btn btn-primary text-xs py-2 px-4 flex items-center gap-1.5 shrink-0"
+              >
+                <span>Open Job Procurements Ledger</span>
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* PERSPECTIVE: COMBINED MASTER P&L */}
+        {/* ========================================================================= */}
+        {overviewPerspective === 'COMBINED' && (
+          <div className="space-y-6">
           {/* ========================================================================= */}
           {/* MASTER TREASURY & NET REMAINING BALANCE HERO CARD */}
           {/* ========================================================================= */}
@@ -1912,6 +2312,8 @@ const Financial: React.FC = () => {
               </div>
             </div>
           )}
+          </div>
+        )}
         </div>
       )}
 
@@ -1920,41 +2322,179 @@ const Financial: React.FC = () => {
       {/* ========================================================================= */}
       {activeTab === 'expenses' && (
         <div className="space-y-6">
+          {/* ========================================================================= */}
+          {/* VIEW SWITCHER: Split View vs Combined vs Origin Specific */}
+          {/* ========================================================================= */}
+          <div className="card p-3 sm:p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-primary-50 dark:bg-primary-950/70 text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800/60">
+                  <Columns className="h-4 w-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-slate-200">
+                    Expense Outflows Organization Mode
+                  </h4>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">
+                    View garage running expenses and customer job card procurements separately, or clubbed together
+                  </p>
+                </div>
+              </div>
+
+              <div className="inline-flex bg-gray-100 dark:bg-slate-900/90 p-1 rounded-xl border border-gray-200 dark:border-slate-800 text-xs font-semibold self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExpenseOriginFilter('SPLIT');
+                    setPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+                    expenseOriginFilter === 'SPLIT'
+                      ? 'bg-primary-600 text-white shadow-xs'
+                      : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Columns className="h-3.5 w-3.5" />
+                  <span>Two Sections (Split View)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExpenseOriginFilter('COMBINED');
+                    setPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+                    expenseOriginFilter === 'COMBINED'
+                      ? 'bg-primary-600 text-white shadow-xs'
+                      : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  <span>Clubbed / Combined All</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExpenseOriginFilter('GARAGE');
+                    setPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+                    expenseOriginFilter === 'GARAGE'
+                      ? 'bg-purple-600 text-white shadow-xs'
+                      : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Building2 className="h-3.5 w-3.5" />
+                  <span>Garage Overhead Only</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExpenseOriginFilter('JOB_CARDS');
+                    setPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+                    expenseOriginFilter === 'JOB_CARDS'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Wrench className="h-3.5 w-3.5" />
+                  <span>Job Procurements Only</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
           {/* Summary Stat Strip */}
+          {/* ========================================================================= */}
           {expensesData?.totals && (
-            <div className={`grid grid-cols-1 ${canViewCost ? 'sm:grid-cols-4' : 'sm:grid-cols-1 max-w-xs'} gap-4`}>
-              {canViewCost && (
-                <>
-                  <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-                    <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Total Filtered Outflows</p>
-                    <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">
-                      {formatCurrency(expensesData.totals.totalAmount)}
-                    </p>
-                  </div>
-                  <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-                    <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Operating Expenses (OpEx)</p>
-                    <p className="text-xl font-bold text-red-600 dark:text-red-400 mt-1">
-                      {formatCurrency(expensesData.totals.opexAmount)}
-                    </p>
-                  </div>
-                  <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-                    <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Capital Assets (CapEx)</p>
-                    <p className="text-xl font-bold text-purple-600 dark:text-purple-400 mt-1">
-                      {formatCurrency(expensesData.totals.capexAmount)}
-                    </p>
-                  </div>
-                </>
-              )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Card 1: Total Outflows */}
               <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-                <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Total Records</p>
-                <p className="text-xl font-bold text-primary-600 dark:text-primary-400 mt-1">
-                  {expensesData.totals.count} entries
+                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-slate-400">
+                  <span className="font-medium">Total Outflows</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300">
+                    {expensesData.totals.count} entries
+                  </span>
+                </div>
+                <p className="text-xl font-bold text-gray-900 dark:text-white mt-1.5 font-mono">
+                  {canViewCost ? formatCurrency(expensesData.totals.totalAmount) : '—'}
+                </p>
+                {canViewCost && (
+                  <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-400 dark:text-slate-500 font-mono">
+                    <span>OpEx: {formatCurrency(expensesData.totals.opexAmount)}</span>
+                    <span>•</span>
+                    <span>CapEx: {formatCurrency(expensesData.totals.capexAmount)}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Card 2: Garage Operations & Overhead */}
+              <div className="card p-4 bg-white dark:bg-[#0c101c] border border-purple-200/60 dark:border-purple-900/40 rounded-xl shadow-xs">
+                <div className="flex items-center justify-between text-xs text-purple-700 dark:text-purple-300">
+                  <span className="font-medium flex items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5" />
+                    <span>Garage Overhead</span>
+                  </span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60">
+                    {expensesData.totals.garageCount ?? 0} entries
+                  </span>
+                </div>
+                <p className="text-xl font-bold text-purple-600 dark:text-purple-400 mt-1.5 font-mono">
+                  {canViewCost ? formatCurrency(expensesData.totals.garageAmount ?? 0) : '—'}
+                </p>
+                <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-1">
+                  Rent, payroll, utilities, tools & setup
+                </p>
+              </div>
+
+              {/* Card 3: Customer Job Procurements & Sublets */}
+              <div className="card p-4 bg-white dark:bg-[#0c101c] border border-blue-200/60 dark:border-blue-900/40 rounded-xl shadow-xs">
+                <div className="flex items-center justify-between text-xs text-blue-700 dark:text-blue-300">
+                  <span className="font-medium flex items-center gap-1.5">
+                    <Wrench className="h-3.5 w-3.5" />
+                    <span>Job Procurements</span>
+                  </span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
+                    {expensesData.totals.jobCount ?? 0} parts/sublets
+                  </span>
+                </div>
+                <p className="text-xl font-bold text-blue-600 dark:text-blue-400 mt-1.5 font-mono">
+                  {canViewCost ? formatCurrency(expensesData.totals.jobProcurementAmount ?? 0) : '—'}
+                </p>
+                <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-1">
+                  Sourced parts & sublet vendor costs
+                </p>
+              </div>
+
+              {/* Card 4: Customer Retail Billed & Margin */}
+              <div className="card p-4 bg-white dark:bg-[#0c101c] border border-emerald-200/60 dark:border-emerald-900/40 rounded-xl shadow-xs">
+                <div className="flex items-center justify-between text-xs text-emerald-700 dark:text-emerald-300">
+                  <span className="font-medium flex items-center gap-1.5">
+                    <Receipt className="h-3.5 w-3.5" />
+                    <span>Customer Retail Billed</span>
+                  </span>
+                  {canViewBoth && expensesData.totals.jobGrossMargin != null && (
+                    <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
+                      +{formatCurrency(expensesData.totals.jobGrossMargin)} margin
+                    </span>
+                  )}
+                </div>
+                <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1.5 font-mono">
+                  {canViewRetail ? formatCurrency(expensesData.totals.jobRetailAmount ?? 0) : '—'}
+                </p>
+                <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-1">
+                  Direct retail billed to vehicle owners
                 </p>
               </div>
             </div>
           )}
 
+          {/* ========================================================================= */}
           {/* Filter Bar */}
+          {/* ========================================================================= */}
           <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               {/* Search */}
@@ -1962,7 +2502,7 @@ const Financial: React.FC = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search expense, payee, ref..."
+                  placeholder="Search expense, payee, JC #, ref..."
                   className="input pl-9 text-xs w-full"
                   value={expenseSearch}
                   onChange={(e) => {
@@ -2053,244 +2593,663 @@ const Financial: React.FC = () => {
             </div>
           </div>
 
-          {/* Expenses Table */}
-          <div className="card overflow-hidden bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-800">
-                <thead className="bg-gray-50 dark:bg-slate-900/60">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Expense #
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Date
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Title & Details
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Category
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Type
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Payee / Vendor
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Mode
-                    </th>
-                    {canViewCost && (
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
-                        Garage Cost
-                      </th>
-                    )}
-                    {canViewRetail && (
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                        Customer Retail
-                      </th>
-                    )}
-                    {canViewBoth && (
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                        Gross Margin
-                      </th>
-                    )}
-                    {canManageFinances && (
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-slate-800 text-xs">
-                  {isExpensesLoading ? (
-                    <tr>
-                      <td colSpan={7 + (canViewCost ? 1 : 0) + (canViewRetail ? 1 : 0) + (canViewBoth ? 1 : 0) + (canManageFinances ? 1 : 0)} className="text-center py-10">
-                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-                        <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">Loading expense ledger...</p>
-                      </td>
-                    </tr>
-                  ) : (expensesData?.expenses || []).length === 0 ? (
-                    <tr>
-                      <td colSpan={7 + (canViewCost ? 1 : 0) + (canViewRetail ? 1 : 0) + (canViewBoth ? 1 : 0) + (canManageFinances ? 1 : 0)} className="text-center py-12">
-                        <AlertCircle className="mx-auto h-8 w-8 text-gray-400" />
-                        <p className="mt-2 text-sm font-medium text-gray-900 dark:text-slate-100">No expenses found</p>
-                        <p className="text-xs text-gray-500 dark:text-slate-400">
-                          Try adjusting your search filters or record a new expense.
-                        </p>
-                      </td>
-                    </tr>
-                  ) : (
-                    (expensesData?.expenses || []).map((exp) => {
-                      const catConfig = CATEGORY_CONFIG[exp.category] || CATEGORY_CONFIG.MISCELLANEOUS;
-                      return (
-                        <tr
-                          key={exp.id}
-                          className="hover:bg-gray-50/80 dark:hover:bg-slate-800/40 transition-colors"
-                        >
-                          <td className="px-4 py-3 font-mono font-medium text-gray-900 dark:text-slate-200 whitespace-nowrap">
-                            {exp.expense_number}
-                          </td>
-                          <td className="px-4 py-3 text-gray-600 dark:text-slate-400 font-mono whitespace-nowrap">
-                            {safeFormatDate(exp.expense_date, 'dd MMM yyyy')}
-                          </td>
-                          <td className="px-4 py-3 max-w-xs">
-                            <div className="font-semibold text-gray-900 dark:text-slate-100 truncate">
-                              {exp.title}
-                            </div>
-                            {exp.notes && (
-                              <div className="text-[11px] text-gray-500 dark:text-slate-400 truncate mt-0.5">
-                                {exp.notes}
-                              </div>
-                            )}
-                            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                              {exp.invoice_reference && (
-                                <span className="text-[10px] font-mono text-primary-600 dark:text-primary-400">
-                                  Ref: {exp.invoice_reference}
-                                </span>
-                              )}
-                              {exp.linked_job_card_number && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-primary-50 dark:bg-primary-950/60 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800/60">
-                                  JC #{exp.linked_job_card_number}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium ${catConfig.badgeClass}`}
-                            >
-                              <catConfig.icon className="h-3 w-3" />
-                              <span>{catConfig.label}</span>
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase font-mono ${
-                                exp.expense_type === 'CAPEX'
-                                  ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 border border-purple-300 dark:border-purple-800'
-                                  : 'bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-300 border border-sky-300 dark:border-sky-800'
-                              }`}
-                            >
-                              {exp.expense_type}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-gray-700 dark:text-slate-300 whitespace-nowrap">
-                            {exp.staff_name ? (
-                              <span className="flex items-center gap-1 font-medium text-amber-600 dark:text-amber-400">
-                                <Users className="h-3 w-3" />
-                                {exp.staff_name} ({exp.staff_role})
-                              </span>
-                            ) : (
-                              exp.payee_recipient || '-'
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-gray-600 dark:text-slate-400 font-mono text-[11px] whitespace-nowrap">
-                            {exp.payment_method}
-                          </td>
-                          {/* Garage Cost (Outflow) */}
-                          {canViewCost && (
-                            <td className="px-4 py-3 text-right font-bold text-sm text-blue-600 dark:text-blue-400 font-mono whitespace-nowrap">
-                              {formatCurrency(exp.amount)}
-                            </td>
-                          )}
-                          {/* Customer Retail (Billed) */}
-                          {canViewRetail && (
-                            <td className="px-4 py-3 text-right font-semibold text-xs text-gray-900 dark:text-slate-100 font-mono whitespace-nowrap">
-                              {exp.customer_retail_price != null ? (
-                                formatCurrency(exp.customer_retail_price)
-                              ) : (
-                                <span className="text-gray-400 dark:text-slate-600 font-normal">—</span>
-                              )}
-                            </td>
-                          )}
-                          {/* Gross Margin */}
-                          {canViewBoth && (
-                            <td className="px-4 py-3 text-right font-mono text-xs whitespace-nowrap">
-                              {exp.customer_retail_price != null ? (
-                                (() => {
-                                  const margin = Number(exp.customer_retail_price) - Number(exp.amount);
-                                  const marginPct = Number(exp.customer_retail_price) > 0
-                                    ? (margin / Number(exp.customer_retail_price)) * 100
-                                    : 0;
-                                  return (
-                                    <div>
-                                      <span
-                                        className={`font-bold ${
-                                          margin >= 0
-                                            ? 'text-emerald-600 dark:text-emerald-400'
-                                            : 'text-red-500 dark:text-red-400'
-                                        }`}
-                                      >
-                                        {formatCurrency(margin, true)}
-                                      </span>
-                                      <div className="text-[10px] text-gray-500 dark:text-slate-400 font-mono">
-                                        {marginPct.toFixed(1)}%
-                                      </div>
-                                    </div>
-                                  );
-                                })()
-                              ) : (
-                                <span className="text-gray-400 dark:text-slate-600 font-normal">—</span>
-                              )}
-                            </td>
-                          )}
-                          {canManageFinances && (
-                            <td className="px-4 py-3 text-right whitespace-nowrap">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  onClick={() => handleOpenEditModal(exp)}
-                                  className="p-1.5 rounded-lg text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-primary-400 dark:hover:bg-slate-800 transition-colors"
-                                  title="Edit Expense"
-                                >
-                                  <Edit3 className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setDeletingExpense(exp);
-                                    setIsDeleteModalOpen(true);
-                                  }}
-                                  className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors"
-                                  title="Delete Expense"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+          {/* ========================================================================= */}
+          {/* TABLES RENDERING: SPLIT VIEW (TWO SECTIONS) vs COMBINED vs SINGLE */}
+          {/* ========================================================================= */}
 
-            {/* Pagination Controls */}
-            {expensesData?.pagination && expensesData.pagination.pages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-slate-800 text-xs">
-                <span className="text-gray-500 dark:text-slate-400">
-                  Showing page {expensesData.pagination.page} of {expensesData.pagination.pages}
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    className="btn btn-secondary text-xs py-1 px-3 disabled:opacity-50"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    disabled={page >= expensesData.pagination.pages}
-                    onClick={() => setPage((p) => p + 1)}
-                    className="btn btn-secondary text-xs py-1 px-3 disabled:opacity-50"
-                  >
-                    Next
-                  </button>
+          {/* 1. SPLIT VIEW: TWO SECTIONS ON THE SAME SCREEN */}
+          {expenseOriginFilter === 'SPLIT' && (
+            <div className="space-y-6">
+              {/* SECTION A: GARAGE OPERATIONS & OVERHEAD */}
+              <div className="card overflow-hidden bg-white dark:bg-[#0c101c] border border-purple-200/70 dark:border-purple-900/50 rounded-xl shadow-xs">
+                <div className="p-4 bg-purple-50/50 dark:bg-purple-950/20 border-b border-purple-100 dark:border-purple-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30">
+                      <Building2 className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <span>1. Garage Operations, Infrastructure & Overheads</span>
+                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                          {garageOnlyExpenses.length} entries
+                        </span>
+                      </h3>
+                      <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                        Workshop rent, staff salaries, utilities, facility setup, equipment, and non-job overheads.
+                      </p>
+                    </div>
+                  </div>
+
+                  {canManageFinances && (
+                    <button
+                      onClick={() => handleOpenAddModal('RENT', 'OPEX')}
+                      className="btn btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5 self-start sm:self-auto"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>+ Record Overhead</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-800">
+                    <thead className="bg-gray-50 dark:bg-slate-900/60">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Expense #
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Date
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Title & Details
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Category
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Type
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Payee / Recipient
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Mode
+                        </th>
+                        {canViewCost && (
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider">
+                            Garage Amount
+                          </th>
+                        )}
+                        {canManageFinances && (
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-slate-800 text-xs">
+                      {isExpensesLoading ? (
+                        <tr>
+                          <td colSpan={7 + (canViewCost ? 1 : 0) + (canManageFinances ? 1 : 0)} className="text-center py-8">
+                            <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600"></div>
+                            <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">Loading garage overheads...</p>
+                          </td>
+                        </tr>
+                      ) : garageOnlyExpenses.length === 0 ? (
+                        <tr>
+                          <td colSpan={7 + (canViewCost ? 1 : 0) + (canManageFinances ? 1 : 0)} className="text-center py-8">
+                            <Building2 className="mx-auto h-7 w-7 text-gray-400" />
+                            <p className="mt-2 text-sm font-medium text-gray-900 dark:text-slate-100">No garage overhead expenses found</p>
+                            <p className="text-xs text-gray-500 dark:text-slate-400">
+                              Adjust filters or record a new overhead expense above.
+                            </p>
+                          </td>
+                        </tr>
+                      ) : (
+                        garageOnlyExpenses.map((exp) => {
+                          const catConfig = CATEGORY_CONFIG[exp.category] || CATEGORY_CONFIG.MISCELLANEOUS;
+                          return (
+                            <tr key={exp.id} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                              <td className="px-4 py-3 font-mono font-medium text-gray-900 dark:text-slate-200 whitespace-nowrap">
+                                {exp.expense_number}
+                              </td>
+                              <td className="px-4 py-3 text-gray-600 dark:text-slate-400 font-mono whitespace-nowrap">
+                                {safeFormatDate(exp.expense_date, 'dd MMM yyyy')}
+                              </td>
+                              <td className="px-4 py-3 max-w-xs">
+                                <div className="font-semibold text-gray-900 dark:text-slate-100 truncate">
+                                  {exp.title}
+                                </div>
+                                {exp.notes && (
+                                  <div className="text-[11px] text-gray-500 dark:text-slate-400 truncate mt-0.5">
+                                    {exp.notes}
+                                  </div>
+                                )}
+                                {exp.invoice_reference && (
+                                  <div className="text-[10px] font-mono text-purple-600 dark:text-purple-400 mt-0.5">
+                                    Ref: {exp.invoice_reference}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium ${catConfig.badgeClass}`}>
+                                  <catConfig.icon className="h-3 w-3" />
+                                  <span>{catConfig.label}</span>
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase font-mono ${
+                                    exp.expense_type === 'CAPEX'
+                                      ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 border border-purple-300 dark:border-purple-800'
+                                      : 'bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-300 border border-sky-300 dark:border-sky-800'
+                                  }`}
+                                >
+                                  {exp.expense_type}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-gray-700 dark:text-slate-300 whitespace-nowrap">
+                                {exp.staff_name ? (
+                                  <span className="flex items-center gap-1 font-medium text-amber-600 dark:text-amber-400">
+                                    <Users className="h-3 w-3" />
+                                    {exp.staff_name} ({exp.staff_role})
+                                  </span>
+                                ) : (
+                                  exp.payee_recipient || '-'
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-gray-600 dark:text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                                {exp.payment_method}
+                              </td>
+                              {canViewCost && (
+                                <td className="px-4 py-3 text-right font-bold text-sm text-purple-600 dark:text-purple-400 font-mono whitespace-nowrap">
+                                  {formatCurrency(exp.amount)}
+                                </td>
+                              )}
+                              {canManageFinances && (
+                                <td className="px-4 py-3 text-right whitespace-nowrap">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      onClick={() => handleOpenEditModal(exp)}
+                                      className="p-1.5 rounded-lg text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-primary-400 dark:hover:bg-slate-800 transition-colors"
+                                      title="Edit Expense"
+                                    >
+                                      <Edit3 className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setDeletingExpense(exp);
+                                        setIsDeleteModalOpen(true);
+                                      }}
+                                      className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors"
+                                      title="Delete Expense"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-            )}
-          </div>
+
+              {/* SECTION B: CUSTOMER JOB CARDS DIRECT PROCUREMENTS & SUBLET SERVICES */}
+              <div className="card overflow-hidden bg-white dark:bg-[#0c101c] border border-blue-200/70 dark:border-blue-900/50 rounded-xl shadow-xs">
+                <div className="p-4 bg-blue-50/50 dark:bg-blue-950/20 border-b border-blue-100 dark:border-blue-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30">
+                      <Wrench className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <span>2. Customer Job Cards Direct Procurements & Sublet Services</span>
+                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                          {jobProcurementExpenses.length} entries
+                        </span>
+                      </h3>
+                      <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                        Direct spare parts procured from vendors & specialist sublet labs (lathe work, injector testing, turbo repairs) linked to customer vehicles.
+                      </p>
+                    </div>
+                  </div>
+
+                  <Link
+                    to="/job-cards"
+                    className="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 self-start sm:self-auto shadow-xs"
+                  >
+                    <span>Open Job Cards</span>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-800">
+                    <thead className="bg-gray-50 dark:bg-slate-900/60">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Expense #
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Date
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Title & Linked Job Card
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Procurement Category
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Vendor / Payee
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Mode
+                        </th>
+                        {canViewCost && (
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                            Garage Cost
+                          </th>
+                        )}
+                        {canViewRetail && (
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                            Customer Retail
+                          </th>
+                        )}
+                        {canViewBoth && (
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                            Gross Margin
+                          </th>
+                        )}
+                        {canManageFinances && (
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-slate-800 text-xs">
+                      {isExpensesLoading ? (
+                        <tr>
+                          <td colSpan={6 + (canViewCost ? 1 : 0) + (canViewRetail ? 1 : 0) + (canViewBoth ? 1 : 0) + (canManageFinances ? 1 : 0)} className="text-center py-8">
+                            <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                            <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">Loading job card procurements...</p>
+                          </td>
+                        </tr>
+                      ) : jobProcurementExpenses.length === 0 ? (
+                        <tr>
+                          <td colSpan={6 + (canViewCost ? 1 : 0) + (canViewRetail ? 1 : 0) + (canViewBoth ? 1 : 0) + (canManageFinances ? 1 : 0)} className="text-center py-8">
+                            <Wrench className="mx-auto h-7 w-7 text-gray-400" />
+                            <p className="mt-2 text-sm font-medium text-gray-900 dark:text-slate-100">No job card procurements found</p>
+                            <p className="text-xs text-gray-500 dark:text-slate-400">
+                              Spare parts and sublets marked as procured in job cards will appear here automatically.
+                            </p>
+                          </td>
+                        </tr>
+                      ) : (
+                        jobProcurementExpenses.map((exp) => {
+                          const catConfig = CATEGORY_CONFIG[exp.category] || CATEGORY_CONFIG.PARTS_PROCUREMENT;
+                          return (
+                            <tr key={exp.id} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                              <td className="px-4 py-3 font-mono font-medium text-gray-900 dark:text-slate-200 whitespace-nowrap">
+                                {exp.expense_number}
+                              </td>
+                              <td className="px-4 py-3 text-gray-600 dark:text-slate-400 font-mono whitespace-nowrap">
+                                {safeFormatDate(exp.expense_date, 'dd MMM yyyy')}
+                              </td>
+                              <td className="px-4 py-3 max-w-xs">
+                                <div className="font-semibold text-gray-900 dark:text-slate-100 truncate">
+                                  {exp.title}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                  {exp.linked_job_card_number && (
+                                    <Link
+                                      to={`/job-cards`}
+                                      className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-primary-50 dark:bg-primary-950/70 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800 hover:underline"
+                                    >
+                                      <span>JC #{exp.linked_job_card_number}</span>
+                                      <ArrowUpRight className="h-2.5 w-2.5" />
+                                    </Link>
+                                  )}
+                                  {exp.invoice_reference && (
+                                    <span className="text-[10px] font-mono text-gray-500 dark:text-slate-400">
+                                      Ref: {exp.invoice_reference}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium ${catConfig.badgeClass}`}>
+                                  <catConfig.icon className="h-3 w-3" />
+                                  <span>{catConfig.label}</span>
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-gray-700 dark:text-slate-300 whitespace-nowrap">
+                                {exp.payee_recipient || 'Vendor / Sublet Lab'}
+                              </td>
+                              <td className="px-4 py-3 text-gray-600 dark:text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                                {exp.payment_method}
+                              </td>
+                              {canViewCost && (
+                                <td className="px-4 py-3 text-right font-bold text-sm text-blue-600 dark:text-blue-400 font-mono whitespace-nowrap">
+                                  {formatCurrency(exp.amount)}
+                                </td>
+                              )}
+                              {canViewRetail && (
+                                <td className="px-4 py-3 text-right font-semibold text-xs text-gray-900 dark:text-slate-100 font-mono whitespace-nowrap">
+                                  {exp.customer_retail_price != null ? (
+                                    formatCurrency(exp.customer_retail_price)
+                                  ) : (
+                                    <span className="text-gray-400 dark:text-slate-600 font-normal">—</span>
+                                  )}
+                                </td>
+                              )}
+                              {canViewBoth && (
+                                <td className="px-4 py-3 text-right font-mono text-xs whitespace-nowrap">
+                                  {exp.customer_retail_price != null ? (
+                                    (() => {
+                                      const margin = Number(exp.customer_retail_price) - Number(exp.amount);
+                                      const marginPct = Number(exp.customer_retail_price) > 0
+                                        ? (margin / Number(exp.customer_retail_price)) * 100
+                                        : 0;
+                                      return (
+                                        <div>
+                                          <span
+                                            className={`font-bold ${
+                                              margin >= 0
+                                                ? 'text-emerald-600 dark:text-emerald-400'
+                                                : 'text-red-500 dark:text-red-400'
+                                            }`}
+                                          >
+                                            {formatCurrency(margin, true)}
+                                          </span>
+                                          <div className="text-[10px] text-gray-500 dark:text-slate-400 font-mono">
+                                            {marginPct.toFixed(1)}%
+                                          </div>
+                                        </div>
+                                      );
+                                    })()
+                                  ) : (
+                                    <span className="text-gray-400 dark:text-slate-600 font-normal">—</span>
+                                  )}
+                                </td>
+                              )}
+                              {canManageFinances && (
+                                <td className="px-4 py-3 text-right whitespace-nowrap">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      onClick={() => handleOpenEditModal(exp)}
+                                      className="p-1.5 rounded-lg text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-primary-400 dark:hover:bg-slate-800 transition-colors"
+                                      title="Edit Expense"
+                                    >
+                                      <Edit3 className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setDeletingExpense(exp);
+                                        setIsDeleteModalOpen(true);
+                                      }}
+                                      className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors"
+                                      title="Delete Expense"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 2. COMBINED OR SINGLE SECTIONS TABLE */}
+          {expenseOriginFilter !== 'SPLIT' && (
+            <div className="card overflow-hidden bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-800">
+                  <thead className="bg-gray-50 dark:bg-slate-900/60">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Expense #
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Title & Details
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Origin
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Category
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Type
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Payee / Vendor
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Mode
+                      </th>
+                      {canViewCost && (
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                          Garage Cost
+                        </th>
+                      )}
+                      {canViewRetail && (
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                          Customer Retail
+                        </th>
+                      )}
+                      {canViewBoth && (
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Gross Margin
+                        </th>
+                      )}
+                      {canManageFinances && (
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-slate-800 text-xs">
+                    {isExpensesLoading ? (
+                      <tr>
+                        <td
+                          colSpan={8 + (canViewCost ? 1 : 0) + (canViewRetail ? 1 : 0) + (canViewBoth ? 1 : 0) + (canManageFinances ? 1 : 0)}
+                          className="text-center py-10"
+                        >
+                          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                          <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">Loading expense ledger...</p>
+                        </td>
+                      </tr>
+                    ) : (expensesData?.expenses || []).length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={8 + (canViewCost ? 1 : 0) + (canViewRetail ? 1 : 0) + (canViewBoth ? 1 : 0) + (canManageFinances ? 1 : 0)}
+                          className="text-center py-12"
+                        >
+                          <AlertCircle className="mx-auto h-8 w-8 text-gray-400" />
+                          <p className="mt-2 text-sm font-medium text-gray-900 dark:text-slate-100">No expenses found</p>
+                          <p className="text-xs text-gray-500 dark:text-slate-400">
+                            Try adjusting your search filters or record a new expense.
+                          </p>
+                        </td>
+                      </tr>
+                    ) : (
+                      (expensesData?.expenses || []).map((exp) => {
+                        const catConfig = CATEGORY_CONFIG[exp.category] || CATEGORY_CONFIG.MISCELLANEOUS;
+                        return (
+                          <tr key={exp.id} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="px-4 py-3 font-mono font-medium text-gray-900 dark:text-slate-200 whitespace-nowrap">
+                              {exp.expense_number}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 dark:text-slate-400 font-mono whitespace-nowrap">
+                              {safeFormatDate(exp.expense_date, 'dd MMM yyyy')}
+                            </td>
+                            <td className="px-4 py-3 max-w-xs">
+                              <div className="font-semibold text-gray-900 dark:text-slate-100 truncate">
+                                {exp.title}
+                              </div>
+                              {exp.notes && (
+                                <div className="text-[11px] text-gray-500 dark:text-slate-400 truncate mt-0.5">
+                                  {exp.notes}
+                                </div>
+                              )}
+                              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                {exp.invoice_reference && (
+                                  <span className="text-[10px] font-mono text-primary-600 dark:text-primary-400">
+                                    Ref: {exp.invoice_reference}
+                                  </span>
+                                )}
+                                {exp.linked_job_card_number && (
+                                  <Link
+                                    to="/job-cards"
+                                    className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-primary-50 dark:bg-primary-950/60 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800/60 hover:underline"
+                                  >
+                                    JC #{exp.linked_job_card_number}
+                                  </Link>
+                                )}
+                              </div>
+                            </td>
+                            {/* Origin Column */}
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              {exp.is_job_procurement ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                  <Wrench className="h-3 w-3" />
+                                  <span>Job Procurement</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                  <Building2 className="h-3 w-3" />
+                                  <span>Garage Overhead</span>
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium ${catConfig.badgeClass}`}>
+                                <catConfig.icon className="h-3 w-3" />
+                                <span>{catConfig.label}</span>
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase font-mono ${
+                                  exp.expense_type === 'CAPEX'
+                                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 border border-purple-300 dark:border-purple-800'
+                                    : 'bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-300 border border-sky-300 dark:border-sky-800'
+                                }`}
+                              >
+                                {exp.expense_type}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-700 dark:text-slate-300 whitespace-nowrap">
+                              {exp.staff_name ? (
+                                <span className="flex items-center gap-1 font-medium text-amber-600 dark:text-amber-400">
+                                  <Users className="h-3 w-3" />
+                                  {exp.staff_name} ({exp.staff_role})
+                                </span>
+                              ) : (
+                                exp.payee_recipient || '-'
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 dark:text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                              {exp.payment_method}
+                            </td>
+                            {canViewCost && (
+                              <td className="px-4 py-3 text-right font-bold text-sm text-blue-600 dark:text-blue-400 font-mono whitespace-nowrap">
+                                {formatCurrency(exp.amount)}
+                              </td>
+                            )}
+                            {canViewRetail && (
+                              <td className="px-4 py-3 text-right font-semibold text-xs text-gray-900 dark:text-slate-100 font-mono whitespace-nowrap">
+                                {exp.customer_retail_price != null ? (
+                                  formatCurrency(exp.customer_retail_price)
+                                ) : (
+                                  <span className="text-gray-400 dark:text-slate-600 font-normal">—</span>
+                                )}
+                              </td>
+                            )}
+                            {canViewBoth && (
+                              <td className="px-4 py-3 text-right font-mono text-xs whitespace-nowrap">
+                                {exp.customer_retail_price != null ? (
+                                  (() => {
+                                    const margin = Number(exp.customer_retail_price) - Number(exp.amount);
+                                    const marginPct = Number(exp.customer_retail_price) > 0
+                                      ? (margin / Number(exp.customer_retail_price)) * 100
+                                      : 0;
+                                    return (
+                                      <div>
+                                        <span
+                                          className={`font-bold ${
+                                            margin >= 0
+                                              ? 'text-emerald-600 dark:text-emerald-400'
+                                              : 'text-red-500 dark:text-red-400'
+                                          }`}
+                                        >
+                                          {formatCurrency(margin, true)}
+                                        </span>
+                                        <div className="text-[10px] text-gray-500 dark:text-slate-400 font-mono">
+                                          {marginPct.toFixed(1)}%
+                                        </div>
+                                      </div>
+                                    );
+                                  })()
+                                ) : (
+                                  <span className="text-gray-400 dark:text-slate-600 font-normal">—</span>
+                                )}
+                              </td>
+                            )}
+                            {canManageFinances && (
+                              <td className="px-4 py-3 text-right whitespace-nowrap">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={() => handleOpenEditModal(exp)}
+                                    className="p-1.5 rounded-lg text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-primary-400 dark:hover:bg-slate-800 transition-colors"
+                                    title="Edit Expense"
+                                  >
+                                    <Edit3 className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setDeletingExpense(exp);
+                                      setIsDeleteModalOpen(true);
+                                    }}
+                                    className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors"
+                                    title="Delete Expense"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Controls */}
+              {expensesData?.pagination && expensesData.pagination.pages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-slate-800 text-xs">
+                  <span className="text-gray-500 dark:text-slate-400">
+                    Showing page {expensesData.pagination.page} of {expensesData.pagination.pages}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={page <= 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      className="btn btn-secondary text-xs py-1 px-3 disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      disabled={page >= expensesData.pagination.pages}
+                      onClick={() => setPage((p) => p + 1)}
+                      className="btn btn-secondary text-xs py-1 px-3 disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
