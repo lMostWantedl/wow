@@ -293,6 +293,7 @@ router.get('/report', requireRoleOrScope(['MANAGER'], ['financial', 'view_custom
         capex: totalCapex,
         allTimeCapex,
         allTimeInvestments,
+        capexRemainingBalance: allTimeInvestments - allTimeCapex,
         allTimeRevenue,
         allTimeOpex,
         allTimeCogs,

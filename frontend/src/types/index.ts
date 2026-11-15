@@ -409,6 +409,7 @@ export interface FinancialReport {
     capex?: number;
     allTimeCapex?: number;
     allTimeInvestments?: number;
+    capexRemainingBalance?: number;
     allTimeRevenue?: number;
     allTimeOpex?: number;
     allTimeCogs?: number;
