@@ -1296,9 +1296,11 @@ const JobCardDetails: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-              Labor Total: <span className="text-primary-600 dark:text-primary-400">{canViewRetail ? formatCurrency(totalLabor) : '••••••'}</span>
-            </span>
+            {canViewRetail && (
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                Labor Total: <span className="text-primary-600 dark:text-primary-400">{formatCurrency(totalLabor)}</span>
+              </span>
+            )}
             {!isLocked && (
               <button
                 onClick={() => openAddLaborModal(false)}
@@ -1324,8 +1326,8 @@ const JobCardDetails: React.FC = () => {
                   <th className="py-3 px-4">Origin / Type</th>
                   <th className="py-3 px-4">Assigned Technicians</th>
                   <th className="py-3 px-4 text-center">Hours</th>
-                  <th className="py-3 px-4 text-right">Hourly Rate</th>
-                  <th className="py-3 px-4 text-right">Total</th>
+                  {canViewRetail && <th className="py-3 px-4 text-right">Hourly Rate</th>}
+                  {canViewRetail && <th className="py-3 px-4 text-right">Total</th>}
                   {!isLocked && <th className="py-3 px-4 text-center">Action</th>}
                 </tr>
               </thead>
@@ -1389,12 +1391,16 @@ const JobCardDetails: React.FC = () => {
                     <td className="py-3 px-4 text-center font-medium">
                       {formatQuantity(item.hours_qty)} hr
                     </td>
-                    <td className="py-3 px-4 text-right font-medium">
-                      {canViewRetail ? formatCurrency(item.unit_price) : '••••••'}
-                    </td>
-                    <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-slate-100">
-                      {canViewRetail ? formatCurrency(item.total_price) : '••••••'}
-                    </td>
+                    {canViewRetail && (
+                      <td className="py-3 px-4 text-right font-medium">
+                        {formatCurrency(item.unit_price)}
+                      </td>
+                    )}
+                    {canViewRetail && (
+                      <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-slate-100">
+                        {formatCurrency(item.total_price)}
+                      </td>
+                    )}
                     {!isLocked && (
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1">
@@ -1463,9 +1469,11 @@ const JobCardDetails: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-              External Total: <span className="text-indigo-600 dark:text-indigo-400">{canViewRetail ? formatCurrency(totalExternal) : '••••••'}</span>
-            </span>
+            {canViewRetail && (
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                External Total: <span className="text-indigo-600 dark:text-indigo-400">{formatCurrency(totalExternal)}</span>
+              </span>
+            )}
             {!isLocked && (
               <button
                 onClick={() => openAddExternalServiceModal(false)}
@@ -1491,8 +1499,8 @@ const JobCardDetails: React.FC = () => {
                   <th className="py-3 px-4">Origin / Type</th>
                   <th className="py-3 px-4">Specialized Vendor / Lab</th>
                   <th className="py-3 px-4 text-center">Qty / Jobs</th>
-                  <th className="py-3 px-4 text-right">Billed Rate</th>
-                  <th className="py-3 px-4 text-right">Total</th>
+                  {canViewRetail && <th className="py-3 px-4 text-right">Billed Rate</th>}
+                  {canViewRetail && <th className="py-3 px-4 text-right">Total</th>}
                   {canViewCost && (
                     <th className="py-3 px-4 text-left">Lab Procurement / Cash Outflow</th>
                   )}
@@ -1543,12 +1551,16 @@ const JobCardDetails: React.FC = () => {
                     <td className="py-3 px-4 text-center font-medium">
                       {formatQuantity(item.hours_qty)}
                     </td>
-                    <td className="py-3 px-4 text-right font-medium">
-                      {canViewRetail ? formatCurrency(item.unit_price) : '••••••'}
-                    </td>
-                    <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-slate-100">
-                      {canViewRetail ? formatCurrency(item.total_price) : '••••••'}
-                    </td>
+                    {canViewRetail && (
+                      <td className="py-3 px-4 text-right font-medium">
+                        {formatCurrency(item.unit_price)}
+                      </td>
+                    )}
+                    {canViewRetail && (
+                      <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-slate-100">
+                        {formatCurrency(item.total_price)}
+                      </td>
+                    )}
                     {canViewCost && (
                       <td className="py-3 px-4">
                         {item.is_procured ? (
@@ -1647,9 +1659,11 @@ const JobCardDetails: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-              Parts Total: <span className="text-primary-600 dark:text-primary-400">{canViewRetail ? formatCurrency(totalParts) : '••••••'}</span>
-            </span>
+            {canViewRetail && (
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                Parts Total: <span className="text-primary-600 dark:text-primary-400">{formatCurrency(totalParts)}</span>
+              </span>
+            )}
             {!isLocked && (
               <button
                 onClick={() => openAddPartModal(false)}
@@ -1674,8 +1688,8 @@ const JobCardDetails: React.FC = () => {
                   <th className="py-3 px-4">Part Name / Number</th>
                   <th className="py-3 px-4">Origin / Type</th>
                   <th className="py-3 px-4 text-center">Quantity</th>
-                  <th className="py-3 px-4 text-right">Unit Price</th>
-                  <th className="py-3 px-4 text-right">Total</th>
+                  {canViewRetail && <th className="py-3 px-4 text-right">Unit Price</th>}
+                  {canViewRetail && <th className="py-3 px-4 text-right">Total</th>}
                   {canViewCost && (
                     <th className="py-3 px-4 text-left">Parts Procurement / Cash Outflow</th>
                   )}
@@ -1718,12 +1732,16 @@ const JobCardDetails: React.FC = () => {
                     <td className="py-3 px-4 text-center font-medium">
                       {formatQuantity(item.quantity)} {item.unit || 'pcs'}
                     </td>
-                    <td className="py-3 px-4 text-right font-medium">
-                      {canViewRetail ? formatCurrency(item.unit_price) : '••••••'}
-                    </td>
-                    <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-slate-100">
-                      {canViewRetail ? formatCurrency(item.total_price) : '••••••'}
-                    </td>
+                    {canViewRetail && (
+                      <td className="py-3 px-4 text-right font-medium">
+                        {formatCurrency(item.unit_price)}
+                      </td>
+                    )}
+                    {canViewRetail && (
+                      <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-slate-100">
+                        {formatCurrency(item.total_price)}
+                      </td>
+                    )}
                     {canViewCost && (
                       <td className="py-3 px-4">
                         {item.is_procured ? (
@@ -1805,65 +1823,67 @@ const JobCardDetails: React.FC = () => {
       </div>
 
       {/* SECTION 4: Summary & Financial Totals */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div className={`grid grid-cols-1 ${canViewRetail ? 'md:grid-cols-2' : ''} gap-5`}>
         {/* Cost Analysis Card */}
-        <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-          <h3 className="text-sm font-bold text-gray-900 dark:text-slate-100 flex items-center gap-2 mb-3">
-            <DollarSign className="h-4 w-4 text-primary-500" />
-            <span>Cost Analysis & Scope Variance</span>
-          </h3>
+        {canViewRetail && (
+          <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-slate-100 flex items-center gap-2 mb-3">
+              <DollarSign className="h-4 w-4 text-primary-500" />
+              <span>Cost Analysis & Scope Variance</span>
+            </h3>
 
-          <div className="space-y-2 text-xs">
-            <div className="flex justify-between items-center py-1 border-b border-gray-100 dark:border-slate-800">
-              <span className="text-slate-500">Initial Estimated Labor:</span>
-              <span className="font-medium text-slate-800 dark:text-slate-200">{canViewRetail ? formatCurrency(initialLaborSubtotal) : '••••••'}</span>
-            </div>
-            {initialExternalSubtotal > 0 && (
+            <div className="space-y-2 text-xs">
               <div className="flex justify-between items-center py-1 border-b border-gray-100 dark:border-slate-800">
-                <span className="text-slate-500">Initial External Sublet Services:</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{canViewRetail ? formatCurrency(initialExternalSubtotal) : '••••••'}</span>
+                <span className="text-slate-500">Initial Estimated Labor:</span>
+                <span className="font-medium text-slate-800 dark:text-slate-200">{formatCurrency(initialLaborSubtotal)}</span>
               </div>
-            )}
-            <div className="flex justify-between items-center py-1 border-b border-gray-100 dark:border-slate-800">
-              <span className="text-slate-500">Initial Estimated Parts:</span>
-              <span className="font-medium text-slate-800 dark:text-slate-200">{canViewRetail ? formatCurrency(initialPartsSubtotal) : '••••••'}</span>
-            </div>
-            <div className="flex justify-between items-center py-1 font-semibold text-primary-600 dark:text-primary-400 bg-primary-50/50 dark:bg-primary-950/20 px-2 rounded">
-              <span>Original Estimate Quotation:</span>
-              <span>{canViewRetail ? formatCurrency(totalEstimate) : '••••••'}</span>
-            </div>
+              {initialExternalSubtotal > 0 && (
+                <div className="flex justify-between items-center py-1 border-b border-gray-100 dark:border-slate-800">
+                  <span className="text-slate-500">Initial External Sublet Services:</span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">{formatCurrency(initialExternalSubtotal)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center py-1 border-b border-gray-100 dark:border-slate-800">
+                <span className="text-slate-500">Initial Estimated Parts:</span>
+                <span className="font-medium text-slate-800 dark:text-slate-200">{formatCurrency(initialPartsSubtotal)}</span>
+              </div>
+              <div className="flex justify-between items-center py-1 font-semibold text-primary-600 dark:text-primary-400 bg-primary-50/50 dark:bg-primary-950/20 px-2 rounded">
+                <span>Original Estimate Quotation:</span>
+                <span>{formatCurrency(totalEstimate)}</span>
+              </div>
 
-            {totalExtra > 0 && (
-              <div className="flex justify-between items-center py-1.5 font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 rounded border border-amber-500/20">
-                <span className="flex items-center gap-1">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Extra Work Added Mid-Repair:
-                </span>
-                <span>+{canViewRetail ? formatCurrency(totalExtra) : '••••••'}</span>
-              </div>
-            )}
+              {totalExtra > 0 && (
+                <div className="flex justify-between items-center py-1.5 font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 rounded border border-amber-500/20">
+                  <span className="flex items-center gap-1">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Extra Work Added Mid-Repair:
+                  </span>
+                  <span>+{formatCurrency(totalExtra)}</span>
+                </div>
+              )}
 
-            <div className="pt-2 border-t border-gray-100 dark:border-slate-800 space-y-1">
-              <div className="flex justify-between items-center text-[11px] text-slate-500">
-                <span>Workshop Labor Total:</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">{canViewRetail ? formatCurrency(totalLabor) : '••••••'}</span>
+              <div className="pt-2 border-t border-gray-100 dark:border-slate-800 space-y-1">
+                <div className="flex justify-between items-center text-[11px] text-slate-500">
+                  <span>Workshop Labor Total:</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(totalLabor)}</span>
+                </div>
+                <div className="flex justify-between items-center text-[11px] text-slate-500">
+                  <span>External Sublet Services Total:</span>
+                  <span className="font-semibold text-indigo-600 dark:text-indigo-400">{formatCurrency(totalExternal)}</span>
+                </div>
+                <div className="flex justify-between items-center text-[11px] text-slate-500">
+                  <span>Spare Parts & Materials Total:</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(totalParts)}</span>
+                </div>
               </div>
-              <div className="flex justify-between items-center text-[11px] text-slate-500">
-                <span>External Sublet Services Total:</span>
-                <span className="font-semibold text-indigo-600 dark:text-indigo-400">{canViewRetail ? formatCurrency(totalExternal) : '••••••'}</span>
-              </div>
-              <div className="flex justify-between items-center text-[11px] text-slate-500">
-                <span>Spare Parts & Materials Total:</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">{canViewRetail ? formatCurrency(totalParts) : '••••••'}</span>
-              </div>
-            </div>
 
-            <div className="flex justify-between items-center pt-2 text-sm font-bold text-gray-900 dark:text-white border-t border-gray-200 dark:border-slate-800">
-              <span>Grand Total Amount:</span>
-              <span className="text-base text-primary-600 dark:text-primary-400">{canViewRetail ? formatCurrency(grandTotal) : '••••••'}</span>
+              <div className="flex justify-between items-center pt-2 text-sm font-bold text-gray-900 dark:text-white border-t border-gray-200 dark:border-slate-800">
+                <span>Grand Total Amount:</span>
+                <span className="text-base text-primary-600 dark:text-primary-400">{formatCurrency(grandTotal)}</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Workflow & Next Actions Card */}
         <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs flex flex-col justify-between">

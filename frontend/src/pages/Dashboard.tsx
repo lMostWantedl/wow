@@ -289,7 +289,7 @@ const Dashboard: React.FC = () => {
           </div>
 
           {/* Technician Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className={`grid grid-cols-1 md:grid-cols-2 ${canViewRetail ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-6`}>
             <div className="card p-6 border border-gray-200 dark:border-slate-800">
               <div className="flex items-center">
                 <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-xl text-amber-600 dark:text-amber-400">
@@ -312,19 +312,21 @@ const Dashboard: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="card p-6 border border-gray-200 dark:border-slate-800">
-              <div className="flex items-center">
-                <div className="p-3 bg-green-50 dark:bg-green-950/40 rounded-xl text-green-600 dark:text-green-400">
-                  <DollarSign className="h-6 w-6" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Revenue Generated</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-slate-100">
-                    {canViewRetail ? `₹${(data.technicianRevenue || 0).toLocaleString()}` : '••••••'}
-                  </p>
+            {canViewRetail && (
+              <div className="card p-6 border border-gray-200 dark:border-slate-800">
+                <div className="flex items-center">
+                  <div className="p-3 bg-green-50 dark:bg-green-950/40 rounded-xl text-green-600 dark:text-green-400">
+                    <DollarSign className="h-6 w-6" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Revenue Generated</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-slate-100">
+                      ₹{(data.technicianRevenue || 0).toLocaleString()}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Technician Assigned Job Cards Queue */}
@@ -513,20 +515,22 @@ const Dashboard: React.FC = () => {
             </Link>
 
             {/* Total Revenue */}
-            <div className="card p-5 border border-gray-200 dark:border-slate-800 dark:bg-slate-850">
-              <div className="flex items-center">
-                <div className="p-2.5 bg-green-50 dark:bg-green-950/40 rounded-xl text-green-600 dark:text-green-400">
-                  <DollarSign className="h-5 w-5" />
+            {canViewRetail && (
+              <div className="card p-5 border border-gray-200 dark:border-slate-800 dark:bg-slate-850">
+                <div className="flex items-center">
+                  <div className="p-2.5 bg-green-50 dark:bg-green-950/40 rounded-xl text-green-600 dark:text-green-400">
+                    <DollarSign className="h-5 w-5" />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Revenue</p>
+                  <p className="text-2xl font-extrabold text-gray-900 dark:text-slate-100 mt-0.5">
+                    ₹{(data.managerRevenue || 0).toLocaleString()}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-1">This {period}</p>
                 </div>
               </div>
-              <div className="mt-3">
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Revenue</p>
-                <p className="text-2xl font-extrabold text-gray-900 dark:text-slate-100 mt-0.5">
-                  {canViewRetail ? `₹${(data.managerRevenue || 0).toLocaleString()}` : '••••••'}
-                </p>
-                <p className="text-[11px] text-slate-400 mt-1">This {period}</p>
-              </div>
-            </div>
+            )}
 
             {/* Total Bills */}
             <Link

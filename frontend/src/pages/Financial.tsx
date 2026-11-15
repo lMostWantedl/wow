@@ -88,17 +88,7 @@ const renderMaskedCurrency = (
   if (isAllowed) {
     return formatCurrency(val, showSign);
   }
-  return (
-    <span
-      className="inline-flex items-center gap-1 text-slate-400 dark:text-slate-500 font-normal text-xs italic select-none"
-      title="Restricted by Scope"
-    >
-      <span>••••••</span>
-      <span className="text-[9px] px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 not-italic font-mono">
-        Scope
-      </span>
-    </span>
-  );
+  return null;
 };
 
 const renderMaskedPercent = (
@@ -108,11 +98,7 @@ const renderMaskedPercent = (
   if (isAllowed) {
     return `${(val ?? 0).toFixed(1)}%`;
   }
-  return (
-    <span className="text-slate-400 dark:text-slate-500 font-normal text-xs italic select-none" title="Restricted by Scope">
-      ••••••
-    </span>
-  );
+  return null;
 };
 
 // Category Configuration & Theme Badges
@@ -707,16 +693,18 @@ const Financial: React.FC = () => {
             <span className="text-xs px-2.5 py-0.5 rounded-full bg-primary-100 text-primary-800 dark:bg-primary-950/70 dark:text-primary-300 font-semibold border border-primary-200 dark:border-primary-800">
               Executive Suite
             </span>
-            <span
-              className={`text-xs px-2.5 py-0.5 rounded-full font-bold font-mono border hidden sm:inline-flex items-center gap-1.5 ${
-                isNetSurplus
-                  ? 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
-                  : 'bg-red-50 dark:bg-red-950/70 text-red-700 dark:text-red-300 border-red-300 dark:border-red-800'
-              }`}
-            >
-              <span>Treasury:</span>
-              <span>{renderMaskedCurrency(displayRemainingBalance, canViewBoth, true)}</span>
-            </span>
+            {canViewBoth && (
+              <span
+                className={`text-xs px-2.5 py-0.5 rounded-full font-bold font-mono border hidden sm:inline-flex items-center gap-1.5 ${
+                  isNetSurplus
+                    ? 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                    : 'bg-red-50 dark:bg-red-950/70 text-red-700 dark:text-red-300 border-red-300 dark:border-red-800'
+                }`}
+              >
+                <span>Treasury:</span>
+                <span>{formatCurrency(displayRemainingBalance, true)}</span>
+              </span>
+            )}
           </div>
           <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
             Track garage revenue, operating costs, staff payroll, rent, and capital setup investments
@@ -835,13 +823,14 @@ const Financial: React.FC = () => {
           {/* ========================================================================= */}
           {/* MASTER TREASURY & NET REMAINING BALANCE HERO CARD */}
           {/* ========================================================================= */}
-          <div
-            className={`p-5 sm:p-6 rounded-2xl border transition-all duration-200 shadow-md ${
-              isNetSurplus
-                ? 'bg-gradient-to-br from-emerald-950/40 via-slate-900/95 to-slate-950 border-emerald-500/30 dark:border-emerald-700/40'
-                : 'bg-gradient-to-br from-red-950/40 via-slate-900/95 to-slate-950 border-red-500/30 dark:border-red-700/40'
-            }`}
-          >
+          {canViewBoth && (
+            <div
+              className={`p-5 sm:p-6 rounded-2xl border transition-all duration-200 shadow-md ${
+                isNetSurplus
+                  ? 'bg-gradient-to-br from-emerald-950/40 via-slate-900/95 to-slate-950 border-emerald-500/30 dark:border-emerald-700/40'
+                  : 'bg-gradient-to-br from-red-950/40 via-slate-900/95 to-slate-950 border-red-500/30 dark:border-red-700/40'
+              }`}
+            >
             {/* Top Bar: Title, Status Badge, Period Toggle, Actions */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
               <div className="flex items-start sm:items-center gap-3.5">
@@ -1097,6 +1086,7 @@ const Financial: React.FC = () => {
               </div>
             </div>
           </div>
+          )}
           {/* Controls: Segmented Period + Date Picker */}
           <div className="card p-4 sm:p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -1156,159 +1146,169 @@ const Financial: React.FC = () => {
 
           {/* KPI Stat Cards */}
           {financialData && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${canViewBoth ? 'lg:grid-cols-3 xl:grid-cols-5' : canViewRetail || canViewCost ? 'lg:grid-cols-2' : 'hidden'} gap-4`}>
               {/* Gross Revenue */}
-              <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Total Gross Revenue</p>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                      {renderMaskedCurrency(financialData.summary.totalRevenue, canViewRetail)}
-                    </p>
-                    <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-500 dark:text-slate-400">
-                      <span>Labor: {renderMaskedCurrency(financialData.summary.laborRevenue, canViewRetail)}</span>
-                      <span>•</span>
-                      <span>Parts: {renderMaskedCurrency(financialData.summary.partsRevenue, canViewRetail)}</span>
+              {canViewRetail && (
+                <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Total Gross Revenue</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                        {formatCurrency(financialData.summary.totalRevenue)}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-500 dark:text-slate-400">
+                        <span>Labor: {formatCurrency(financialData.summary.laborRevenue)}</span>
+                        <span>•</span>
+                        <span>Parts: {formatCurrency(financialData.summary.partsRevenue)}</span>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50">
+                      <DollarSign className="h-6 w-6" />
                     </div>
                   </div>
-                  <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50">
-                    <DollarSign className="h-6 w-6" />
-                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Operating Outflows (COGS + OpEx) */}
-              <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Operating Outflows</p>
-                    <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
-                      {renderMaskedCurrency(financialData.summary.totalCosts, canViewCost)}
-                    </p>
-                    <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-500 dark:text-slate-400">
-                      <span>Parts COGS: {renderMaskedCurrency(financialData.summary.cogs, canViewCost)}</span>
-                      <span>•</span>
-                      <span>OpEx: {renderMaskedCurrency(financialData.summary.opex, canViewCost)}</span>
+              {canViewCost && (
+                <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Operating Outflows</p>
+                      <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
+                        {formatCurrency(financialData.summary.totalCosts)}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-500 dark:text-slate-400">
+                        <span>Parts COGS: {formatCurrency(financialData.summary.cogs)}</span>
+                        <span>•</span>
+                        <span>OpEx: {formatCurrency(financialData.summary.opex)}</span>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/50">
+                      <TrendingDown className="h-6 w-6" />
                     </div>
                   </div>
-                  <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/50">
-                    <TrendingDown className="h-6 w-6" />
-                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Net Operating Profit */}
-              <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Net Operating Profit</p>
-                    <p
-                      className={`text-2xl font-bold mt-1 ${
-                        (financialData.summary.netProfit || 0) >= 0
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-amber-500 dark:text-amber-400'
-                      }`}
-                    >
-                      {renderMaskedCurrency(financialData.summary.netProfit, canViewBoth)}
-                    </p>
-                    <div className="flex items-center gap-1.5 mt-2 text-[11px]">
-                      <span className="text-gray-500 dark:text-slate-400">Margin:</span>
-                      <span
-                        className={`font-semibold ${
-                          (financialData.summary.netProfitMargin || 0) >= 0
+              {canViewBoth && (
+                <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Net Operating Profit</p>
+                      <p
+                        className={`text-2xl font-bold mt-1 ${
+                          (financialData.summary.netProfit || 0) >= 0
                             ? 'text-emerald-600 dark:text-emerald-400'
                             : 'text-amber-500 dark:text-amber-400'
                         }`}
                       >
-                        {renderMaskedPercent(financialData.summary.netProfitMargin, canViewBoth)}
-                      </span>
-                      <span className="text-gray-400">•</span>
-                      <span className="text-gray-500 dark:text-slate-400">
-                        Gross: {renderMaskedPercent(financialData.summary.grossProfitMargin, canViewBoth)}
-                      </span>
+                        {formatCurrency(financialData.summary.netProfit)}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-2 text-[11px]">
+                        <span className="text-gray-500 dark:text-slate-400">Margin:</span>
+                        <span
+                          className={`font-semibold ${
+                            (financialData.summary.netProfitMargin || 0) >= 0
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : 'text-amber-500 dark:text-amber-400'
+                          }`}
+                        >
+                          {`${(financialData.summary.netProfitMargin ?? 0).toFixed(1)}%`}
+                        </span>
+                        <span className="text-gray-400">•</span>
+                        <span className="text-gray-500 dark:text-slate-400">
+                          Gross: {`${(financialData.summary.grossProfitMargin ?? 0).toFixed(1)}%`}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/50">
+                      <TrendingUp className="h-6 w-6" />
                     </div>
                   </div>
-                  <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/50">
-                    <TrendingUp className="h-6 w-6" />
-                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Garage Setup & Assets (CapEx) */}
-              <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Total Setup & CapEx Assets</p>
-                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-1">
-                      {renderMaskedCurrency(financialData.summary.allTimeCapex, canViewCost)}
-                    </p>
-                    <div className="flex flex-col gap-0.5 mt-2 text-[11px]">
-                      <span className="text-gray-500 dark:text-slate-400">Equipment, Lifts & Bays</span>
-                      <span className="text-gray-600 dark:text-slate-300 font-medium">
-                        Setup Balance:{' '}
-                        <span className={`font-mono font-bold ${isCapexSurplus ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
-                          {renderMaskedCurrency(capexRemainingBalance, canViewCost, true)}
+              {canViewCost && (
+                <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Total Setup & CapEx Assets</p>
+                      <p className="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-1">
+                        {formatCurrency(financialData.summary.allTimeCapex)}
+                      </p>
+                      <div className="flex flex-col gap-0.5 mt-2 text-[11px]">
+                        <span className="text-gray-500 dark:text-slate-400">Equipment, Lifts & Bays</span>
+                        <span className="text-gray-600 dark:text-slate-300 font-medium">
+                          Setup Balance:{' '}
+                          <span className={`font-mono font-bold ${isCapexSurplus ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+                            {formatCurrency(capexRemainingBalance, true)}
+                          </span>
                         </span>
-                      </span>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 border border-purple-100 dark:border-purple-900/50">
+                      <Building2 className="h-6 w-6" />
                     </div>
                   </div>
-                  <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 border border-purple-100 dark:border-purple-900/50">
-                    <Building2 className="h-6 w-6" />
-                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Net Remaining Treasury Balance (Surplus / Deficit) */}
-              <div
-                className={`card p-5 border rounded-xl shadow-xs transition-all ${
-                  isNetSurplus
-                    ? 'bg-emerald-950/10 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/80'
-                    : 'bg-red-950/10 dark:bg-red-950/20 border-red-300 dark:border-red-800/80'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-xs font-semibold text-gray-700 dark:text-slate-300">Net Remaining Balance</p>
-                      <span
-                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
-                          isNetSurplus
-                            ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300'
-                            : 'bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-300'
+              {canViewBoth && (
+                <div
+                  className={`card p-5 border rounded-xl shadow-xs transition-all ${
+                    isNetSurplus
+                      ? 'bg-emerald-950/10 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/80'
+                      : 'bg-red-950/10 dark:bg-red-950/20 border-red-300 dark:border-red-800/80'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-semibold text-gray-700 dark:text-slate-300">Net Remaining Balance</p>
+                        <span
+                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                            isNetSurplus
+                              ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300'
+                              : 'bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-300'
+                          }`}
+                        >
+                          {isNetSurplus ? 'Surplus' : 'Deficit'}
+                        </span>
+                      </div>
+                      <p
+                        className={`text-2xl font-bold font-mono mt-1 ${
+                          isNetSurplus ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
                         }`}
                       >
-                        {isNetSurplus ? 'Surplus' : 'Deficit'}
-                      </span>
+                        {formatCurrency(displayRemainingBalance, true)}
+                      </p>
+                      <div className="flex items-center gap-1 mt-2 text-[11px] text-gray-500 dark:text-slate-400">
+                        <span>Capital + Profit − CapEx</span>
+                      </div>
                     </div>
-                    <p
-                      className={`text-2xl font-bold font-mono mt-1 ${
-                        isNetSurplus ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+                    <div
+                      className={`p-3 rounded-xl border ${
+                        isNetSurplus
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/50'
+                          : 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border-red-100 dark:border-red-900/50'
                       }`}
                     >
-                      {renderMaskedCurrency(displayRemainingBalance, canViewBoth, true)}
-                    </p>
-                    <div className="flex items-center gap-1 mt-2 text-[11px] text-gray-500 dark:text-slate-400">
-                      <span>Capital + Profit − CapEx</span>
+                      <Landmark className="h-6 w-6" />
                     </div>
                   </div>
-                  <div
-                    className={`p-3 rounded-xl border ${
-                      isNetSurplus
-                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/50'
-                        : 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border-red-100 dark:border-red-900/50'
-                    }`}
-                  >
-                    <Landmark className="h-6 w-6" />
-                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
           {/* ========================================================================= */}
           {/* CUSTOMER RETAIL (BILLED) VS. GARAGE COST (OUTFLOW) COMPARISON WIDGET */}
           {/* ========================================================================= */}
-          {financialData?.summary.retailVsCost && (
+          {financialData?.summary.retailVsCost && canViewBoth && (
             <div className="card p-6 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-2xl shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-100 dark:border-slate-800 gap-3">
                 <div>
@@ -1526,7 +1526,7 @@ const Financial: React.FC = () => {
           {/* Interactive Charts: 6-Month Monthly Trend & Expense Category Distribution */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Monthly Trend Area / Bar Chart */}
-            <div className="lg:col-span-2 card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+            <div className={`${canViewCost ? 'lg:col-span-2' : 'col-span-full'} card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs`}>
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-sm font-bold text-gray-900 dark:text-slate-100">
@@ -1568,64 +1568,54 @@ const Financial: React.FC = () => {
             </div>
 
             {/* Expense Categories Donut Chart */}
-            <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs flex flex-col justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-slate-100 mb-1">
-                  Expense Outflow Distribution
-                </h3>
-                <p className="text-xs text-gray-500 dark:text-slate-400 mb-4">
-                  Breakdown by category for selected timeframe
-                </p>
-                {canViewCost ? (
-                  <>
-                    <div className="h-56 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={financialData?.expenseCategories || []}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={50}
-                            outerRadius={80}
-                            paddingAngle={3}
-                            dataKey="amount"
-                            nameKey="category"
-                            stroke="#0c101c"
-                            strokeWidth={2}
-                          >
-                            {(financialData?.expenseCategories || []).map((_, index) => (
-                              <Cell key={`cat-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: '#0c101c',
-                              borderColor: '#1e293b',
-                              borderRadius: '0.75rem',
-                              color: '#f8fafc',
-                              fontSize: '12px',
-                              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.6)',
-                            }}
-                            formatter={(val: any, name: any) => [
-                              formatCurrency(val),
-                              CATEGORY_CONFIG[name as ExpenseCategory]?.label || name,
-                            ]}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </>
-                ) : (
-                  <div className="h-56 flex flex-col items-center justify-center text-center p-4 rounded-xl bg-slate-900/50 border border-slate-800">
-                    <AlertCircle className="h-8 w-8 text-slate-500 mb-2" />
-                    <p className="text-xs text-slate-400 font-medium">Expense breakdown restricted</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Requires 'View Garage Cost' scope</p>
+            {canViewCost && (
+              <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs flex flex-col justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-slate-100 mb-1">
+                    Expense Outflow Distribution
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400 mb-4">
+                    Breakdown by category for selected timeframe
+                  </p>
+                  <div className="h-56 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={financialData?.expenseCategories || []}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={50}
+                          outerRadius={80}
+                          paddingAngle={3}
+                          dataKey="amount"
+                          nameKey="category"
+                          stroke="#0c101c"
+                          strokeWidth={2}
+                        >
+                          {(financialData?.expenseCategories || []).map((_, index) => (
+                            <Cell key={`cat-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#0c101c',
+                            borderColor: '#1e293b',
+                            borderRadius: '0.75rem',
+                            color: '#f8fafc',
+                            fontSize: '12px',
+                            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.6)',
+                          }}
+                          formatter={(val: any, name: any) => [
+                            formatCurrency(val),
+                            CATEGORY_CONFIG[name as ExpenseCategory]?.label || name,
+                          ]}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
                   </div>
-                )}
-              </div>
+                </div>
 
-              {/* Legend List */}
-              {canViewCost && (
+                {/* Legend List */}
                 <div className="space-y-1.5 mt-2 max-h-32 overflow-y-auto text-xs pr-1">
                   {(financialData?.expenseCategories || []).map((cat, idx) => (
                     <div key={cat.category} className="flex items-center justify-between text-slate-600 dark:text-slate-400">
@@ -1644,8 +1634,8 @@ const Financial: React.FC = () => {
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Today's Operational Pulse */}
@@ -1661,36 +1651,42 @@ const Financial: React.FC = () => {
                 </span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="p-3.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40">
-                  <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Today's Invoiced Revenue</p>
-                  <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                    {renderMaskedCurrency(dailyData.summary.totalRevenue, canViewRetail)}
-                  </p>
-                </div>
-                <div className="p-3.5 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40">
-                  <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Payments Collected</p>
-                  <p className="text-xl font-bold text-blue-600 dark:text-blue-400 mt-0.5">
-                    {renderMaskedCurrency(dailyData.summary.paymentsCollected, canViewRetail)}
-                  </p>
-                </div>
+                {canViewRetail && (
+                  <div className="p-3.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40">
+                    <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Today's Invoiced Revenue</p>
+                    <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                      {formatCurrency(dailyData.summary.totalRevenue)}
+                    </p>
+                  </div>
+                )}
+                {canViewRetail && (
+                  <div className="p-3.5 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40">
+                    <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Payments Collected</p>
+                    <p className="text-xl font-bold text-blue-600 dark:text-blue-400 mt-0.5">
+                      {formatCurrency(dailyData.summary.paymentsCollected)}
+                    </p>
+                  </div>
+                )}
                 <div className="p-3.5 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200/60 dark:border-purple-900/40">
                   <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Bills Generated</p>
                   <p className="text-xl font-bold text-purple-600 dark:text-purple-400 mt-0.5">
                     {dailyData.summary.totalBills} Bills
                   </p>
                 </div>
-                <div className="p-3.5 rounded-xl bg-red-50/50 dark:bg-red-950/20 border border-red-200/60 dark:border-red-900/40">
-                  <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Daily Expenses Incurred</p>
-                  <p className="text-xl font-bold text-red-600 dark:text-red-400 mt-0.5">
-                    {renderMaskedCurrency(dailyData.summary.dailyExpenses, canViewCost)}
-                  </p>
-                </div>
+                {canViewCost && (
+                  <div className="p-3.5 rounded-xl bg-red-50/50 dark:bg-red-950/20 border border-red-200/60 dark:border-red-900/40">
+                    <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Daily Expenses Incurred</p>
+                    <p className="text-xl font-bold text-red-600 dark:text-red-400 mt-0.5">
+                      {formatCurrency(dailyData.summary.dailyExpenses)}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
           {/* Structured Profit & Loss Waterfall Statement */}
-          {profitLossData && (
+          {profitLossData && canViewBoth && (
             <div className="card p-6 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-100 dark:border-slate-800 gap-2">
                 <div>
@@ -1906,25 +1902,29 @@ const Financial: React.FC = () => {
         <div className="space-y-6">
           {/* Summary Stat Strip */}
           {expensesData?.totals && (
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-                <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Total Filtered Outflows</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">
-                  {renderMaskedCurrency(expensesData.totals.totalAmount, canViewCost)}
-                </p>
-              </div>
-              <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-                <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Operating Expenses (OpEx)</p>
-                <p className="text-xl font-bold text-red-600 dark:text-red-400 mt-1">
-                  {renderMaskedCurrency(expensesData.totals.opexAmount, canViewCost)}
-                </p>
-              </div>
-              <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
-                <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Capital Assets (CapEx)</p>
-                <p className="text-xl font-bold text-purple-600 dark:text-purple-400 mt-1">
-                  {renderMaskedCurrency(expensesData.totals.capexAmount, canViewCost)}
-                </p>
-              </div>
+            <div className={`grid grid-cols-1 ${canViewCost ? 'sm:grid-cols-4' : 'sm:grid-cols-1 max-w-xs'} gap-4`}>
+              {canViewCost && (
+                <>
+                  <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+                    <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Total Filtered Outflows</p>
+                    <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">
+                      {formatCurrency(expensesData.totals.totalAmount)}
+                    </p>
+                  </div>
+                  <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+                    <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Operating Expenses (OpEx)</p>
+                    <p className="text-xl font-bold text-red-600 dark:text-red-400 mt-1">
+                      {formatCurrency(expensesData.totals.opexAmount)}
+                    </p>
+                  </div>
+                  <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+                    <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Capital Assets (CapEx)</p>
+                    <p className="text-xl font-bold text-purple-600 dark:text-purple-400 mt-1">
+                      {formatCurrency(expensesData.totals.capexAmount)}
+                    </p>
+                  </div>
+                </>
+              )}
               <div className="card p-4 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
                 <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Total Records</p>
                 <p className="text-xl font-bold text-primary-600 dark:text-primary-400 mt-1">
@@ -2060,15 +2060,21 @@ const Financial: React.FC = () => {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                       Mode
                     </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
-                      Garage Cost
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                      Customer Retail
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Gross Margin
-                    </th>
+                    {canViewCost && (
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                        Garage Cost
+                      </th>
+                    )}
+                    {canViewRetail && (
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                        Customer Retail
+                      </th>
+                    )}
+                    {canViewBoth && (
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Gross Margin
+                      </th>
+                    )}
                     {canManageFinances && (
                       <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                         Actions
@@ -2079,14 +2085,14 @@ const Financial: React.FC = () => {
                 <tbody className="divide-y divide-gray-200 dark:divide-slate-800 text-xs">
                   {isExpensesLoading ? (
                     <tr>
-                      <td colSpan={canManageFinances ? 11 : 10} className="text-center py-10">
+                      <td colSpan={7 + (canViewCost ? 1 : 0) + (canViewRetail ? 1 : 0) + (canViewBoth ? 1 : 0) + (canManageFinances ? 1 : 0)} className="text-center py-10">
                         <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
                         <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">Loading expense ledger...</p>
                       </td>
                     </tr>
                   ) : (expensesData?.expenses || []).length === 0 ? (
                     <tr>
-                      <td colSpan={canManageFinances ? 11 : 10} className="text-center py-12">
+                      <td colSpan={7 + (canViewCost ? 1 : 0) + (canViewRetail ? 1 : 0) + (canViewBoth ? 1 : 0) + (canManageFinances ? 1 : 0)} className="text-center py-12">
                         <AlertCircle className="mx-auto h-8 w-8 text-gray-400" />
                         <p className="mt-2 text-sm font-medium text-gray-900 dark:text-slate-100">No expenses found</p>
                         <p className="text-xs text-gray-500 dark:text-slate-400">
@@ -2163,21 +2169,25 @@ const Financial: React.FC = () => {
                             {exp.payment_method}
                           </td>
                           {/* Garage Cost (Outflow) */}
-                          <td className="px-4 py-3 text-right font-bold text-sm text-blue-600 dark:text-blue-400 font-mono whitespace-nowrap">
-                            {renderMaskedCurrency(exp.amount, canViewCost)}
-                          </td>
+                          {canViewCost && (
+                            <td className="px-4 py-3 text-right font-bold text-sm text-blue-600 dark:text-blue-400 font-mono whitespace-nowrap">
+                              {formatCurrency(exp.amount)}
+                            </td>
+                          )}
                           {/* Customer Retail (Billed) */}
-                          <td className="px-4 py-3 text-right font-semibold text-xs text-gray-900 dark:text-slate-100 font-mono whitespace-nowrap">
-                            {exp.customer_retail_price != null ? (
-                              renderMaskedCurrency(exp.customer_retail_price, canViewRetail)
-                            ) : (
-                              <span className="text-gray-400 dark:text-slate-600 font-normal">—</span>
-                            )}
-                          </td>
+                          {canViewRetail && (
+                            <td className="px-4 py-3 text-right font-semibold text-xs text-gray-900 dark:text-slate-100 font-mono whitespace-nowrap">
+                              {exp.customer_retail_price != null ? (
+                                formatCurrency(exp.customer_retail_price)
+                              ) : (
+                                <span className="text-gray-400 dark:text-slate-600 font-normal">—</span>
+                              )}
+                            </td>
+                          )}
                           {/* Gross Margin */}
-                          <td className="px-4 py-3 text-right font-mono text-xs whitespace-nowrap">
-                            {exp.customer_retail_price != null ? (
-                              canViewBoth ? (
+                          {canViewBoth && (
+                            <td className="px-4 py-3 text-right font-mono text-xs whitespace-nowrap">
+                              {exp.customer_retail_price != null ? (
                                 (() => {
                                   const margin = Number(exp.customer_retail_price) - Number(exp.amount);
                                   const marginPct = Number(exp.customer_retail_price) > 0
@@ -2201,12 +2211,10 @@ const Financial: React.FC = () => {
                                   );
                                 })()
                               ) : (
-                                <span className="text-slate-400 dark:text-slate-500 font-normal text-xs italic select-none">••••••</span>
-                              )
-                            ) : (
-                              <span className="text-gray-400 dark:text-slate-600 font-normal">—</span>
-                            )}
-                          </td>
+                                <span className="text-gray-400 dark:text-slate-600 font-normal">—</span>
+                              )}
+                            </td>
+                          )}
                           {canManageFinances && (
                             <td className="px-4 py-3 text-right whitespace-nowrap">
                               <div className="flex items-center justify-end gap-1.5">

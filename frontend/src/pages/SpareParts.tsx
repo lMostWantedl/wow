@@ -11,6 +11,9 @@ import toast from 'react-hot-toast';
 const SpareParts: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const userScopes = (user as any)?.scopes || [];
+  const isManager = user?.role === 'MANAGER';
+  const canViewRetail = isManager || userScopes.includes('view_customer_retail') || userScopes.includes('financial');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
@@ -273,9 +276,11 @@ const SpareParts: React.FC = () => {
                 <th className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider text-center">
                   Stock
                 </th>
-                <th className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider text-right">
-                  Price
-                </th>
+                {canViewRetail && (
+                  <th className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider text-right">
+                    Price
+                  </th>
+                )}
                 <th className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider text-right">
                   Actions
                 </th>
@@ -374,9 +379,11 @@ const SpareParts: React.FC = () => {
                     </td>
 
                     {/* Price */}
-                    <td className="py-3 px-4 font-bold text-gray-900 dark:text-slate-100 text-right">
-                      ₹{(part.price || 0).toLocaleString()}
-                    </td>
+                    {canViewRetail && (
+                      <td className="py-3 px-4 font-bold text-gray-900 dark:text-slate-100 text-right">
+                        ₹{(part.price || 0).toLocaleString()}
+                      </td>
+                    )}
 
                     {/* Actions */}
                     <td className="py-3 px-4 text-right">

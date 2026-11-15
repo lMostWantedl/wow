@@ -39,6 +39,9 @@ const getCategoryStyle = (category?: string) => {
 const Services: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const userScopes = (user as any)?.scopes || [];
+  const isManager = user?.role === 'MANAGER';
+  const canViewRetail = isManager || userScopes.includes('view_customer_retail') || userScopes.includes('financial');
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<'sections' | 'table'>('sections');
@@ -316,12 +319,14 @@ const Services: React.FC = () => {
                       </div>
 
                       <div className="flex items-center justify-between md:justify-end gap-6 shrink-0">
-                        <div className="text-right">
-                          <span className="text-xs text-slate-400 block uppercase tracking-wider font-semibold">Standard Rate</span>
-                          <span className="text-base font-extrabold text-primary-600 dark:text-primary-400">
-                            ₹{(service.price || 0).toLocaleString()}
-                          </span>
-                        </div>
+                        {canViewRetail && (
+                          <div className="text-right">
+                            <span className="text-xs text-slate-400 block uppercase tracking-wider font-semibold">Standard Rate</span>
+                            <span className="text-base font-extrabold text-primary-600 dark:text-primary-400">
+                              ₹{(service.price || 0).toLocaleString()}
+                            </span>
+                          </div>
+                        )}
 
                         {canManageServices && (
                           <div className="flex items-center gap-1.5 border-l border-gray-100 dark:border-slate-800 pl-4">
@@ -361,7 +366,7 @@ const Services: React.FC = () => {
                   <th className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Service Name</th>
                   <th className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Category</th>
                   <th className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Description</th>
-                  <th className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider text-right">Standard Rate</th>
+                  {canViewRetail && <th className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider text-right">Standard Rate</th>}
                   <th className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider text-center">Duration</th>
                   <th className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider text-right">Actions</th>
                 </tr>
@@ -394,9 +399,11 @@ const Services: React.FC = () => {
                       <td className="py-3 px-4 text-slate-500 dark:text-slate-400 max-w-xs truncate">
                         {service.description || '—'}
                       </td>
-                      <td className="py-3 px-4 font-bold text-primary-600 dark:text-primary-400 text-right">
-                        ₹{(service.price || 0).toLocaleString()}
-                      </td>
+                      {canViewRetail && (
+                        <td className="py-3 px-4 font-bold text-primary-600 dark:text-primary-400 text-right">
+                          ₹{(service.price || 0).toLocaleString()}
+                        </td>
+                      )}
                       <td className="py-3 px-4 text-center font-medium text-slate-700 dark:text-slate-300">
                         {service.duration || 60} min
                       </td>
