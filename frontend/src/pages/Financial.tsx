@@ -41,6 +41,9 @@ import {
   ExternalLink,
   Columns,
   Receipt,
+  Car,
+  Coffee,
+  BadgePercent,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ExpenseOrigin } from '../services/financial';
@@ -164,6 +167,24 @@ export const CATEGORY_CONFIG: Record<
     icon: ShieldCheck,
     defaultType: 'OPEX',
   },
+  TRAVEL_CONVEYANCE: {
+    label: 'Travel & Conveyance',
+    badgeClass: 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300 dark:border dark:border-teal-800/60',
+    icon: Car,
+    defaultType: 'OPEX',
+  },
+  FOOD_REFRESHMENTS: {
+    label: 'Food & Refreshments',
+    badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 dark:border dark:border-amber-800/60',
+    icon: Coffee,
+    defaultType: 'OPEX',
+  },
+  COMMISSION: {
+    label: 'Commission & Referral',
+    badgeClass: 'bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-300 dark:border dark:border-violet-800/60',
+    icon: BadgePercent,
+    defaultType: 'OPEX',
+  },
   PARTS_PROCUREMENT: {
     label: 'Job Parts Procurement',
     badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border dark:border-emerald-800/60',
@@ -251,6 +272,7 @@ const Financial: React.FC = () => {
 
   // Salaries Tab Year Filter
   const [salaryYear, setSalaryYear] = useState<number>(new Date().getFullYear());
+  const [miscSectionFilter, setMiscSectionFilter] = useState<'ALL' | 'TRAVEL_CONVEYANCE' | 'FOOD_REFRESHMENTS' | 'COMMISSION' | 'MISCELLANEOUS'>('ALL');
 
   // Modal States
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
@@ -333,6 +355,37 @@ const Financial: React.FC = () => {
       }),
     { enabled: canAccessFinancial && canViewCost }
   );
+
+  // 4c. Dedicated Garage Operational & Miscellaneous Work Expenses Query (Travel, Food, Commission, Misc)
+  const { data: garageMiscExpensesData, isLoading: isGarageMiscLoading } = useQuery(
+    ['garage-expenses', 'garage-misc-register'],
+    () =>
+      financialService.getExpenses({
+        page: 1,
+        limit: 200,
+        origin: 'GARAGE',
+        expenseType: 'OPEX',
+      }),
+    { enabled: canAccessFinancial && canViewCost }
+  );
+
+  const garageMiscExpenses = useMemo(() => {
+    return (garageMiscExpensesData?.expenses || []).filter(
+      (e) =>
+        ['TRAVEL_CONVEYANCE', 'FOOD_REFRESHMENTS', 'COMMISSION', 'MISCELLANEOUS', 'CONSUMABLES', 'MAINTENANCE'].includes(e.category) ||
+        (!['GARAGE_SETUP', 'TOOLS_EQUIPMENT', 'RENT', 'SALARY', 'PARTS_PROCUREMENT', 'SUBLET_SERVICES'].includes(e.category) && !e.is_job_procurement)
+    );
+  }, [garageMiscExpensesData]);
+
+  const filteredMiscExpenses = useMemo(() => {
+    if (miscSectionFilter === 'ALL') return garageMiscExpenses;
+    if (miscSectionFilter === 'MISCELLANEOUS') {
+      return garageMiscExpenses.filter(
+        (e) => !['TRAVEL_CONVEYANCE', 'FOOD_REFRESHMENTS', 'COMMISSION'].includes(e.category)
+      );
+    }
+    return garageMiscExpenses.filter((e) => e.category === miscSectionFilter);
+  }, [garageMiscExpenses, miscSectionFilter]);
 
   // 5. Salaries Summary Query
   const { data: salariesData } = useQuery(
@@ -3984,6 +4037,355 @@ const Financial: React.FC = () => {
                                     }}
                                     className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-red-950/40"
                                     title="Delete Asset"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* Section 3: Garage Operational Work, Travel, Food & Miscellaneous Expenses */}
+          {/* ========================================================================= */}
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-bold text-gray-900 dark:text-slate-100 flex items-center gap-2">
+                  <Coffee className="h-4 w-4 text-amber-500" />
+                  <span>Garage Operational Work Expenses (Travel, Food, Commission & Misc)</span>
+                  {garageMiscExpenses.length > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 font-mono">
+                      {garageMiscExpenses.length} entries
+                    </span>
+                  )}
+                </h4>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                  Day-to-day out-of-pocket expenses incurred for garage operations: fuel & customer vehicle transport, mechanic food & tea, referral commissions, and general petty cash.
+                </p>
+              </div>
+
+              {canManageFinances && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => handleOpenAddModal('TRAVEL_CONVEYANCE', 'OPEX')}
+                    className="btn btn-secondary text-xs py-1.5 px-2.5 flex items-center gap-1.5"
+                  >
+                    <Car className="h-3.5 w-3.5 text-teal-500" />
+                    <span>+ Travel / Fuel</span>
+                  </button>
+                  <button
+                    onClick={() => handleOpenAddModal('FOOD_REFRESHMENTS', 'OPEX')}
+                    className="btn btn-secondary text-xs py-1.5 px-2.5 flex items-center gap-1.5"
+                  >
+                    <Coffee className="h-3.5 w-3.5 text-amber-500" />
+                    <span>+ Food / Meals</span>
+                  </button>
+                  <button
+                    onClick={() => handleOpenAddModal('COMMISSION', 'OPEX')}
+                    className="btn btn-secondary text-xs py-1.5 px-2.5 flex items-center gap-1.5"
+                  >
+                    <BadgePercent className="h-3.5 w-3.5 text-violet-500" />
+                    <span>+ Commission</span>
+                  </button>
+                  <button
+                    onClick={() => handleOpenAddModal('MISCELLANEOUS', 'OPEX')}
+                    className="btn btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Record Work Expense</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Quick KPI Stat Cards for Travel, Food, Commission, Misc */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              {/* 1. Travel & Fuel */}
+              <div className="card p-3.5 bg-white dark:bg-[#0c101c] border border-teal-200/60 dark:border-teal-900/40 rounded-xl shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400">
+                      <Car className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-bold text-gray-900 dark:text-slate-100">Travel & Fuel</h5>
+                      <p className="text-[10px] text-gray-400">Pickups, delivery, fuel</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-teal-600 dark:text-teal-400 font-mono">
+                      {formatCurrency(garageMiscExpenses.filter((e) => e.category === 'TRAVEL_CONVEYANCE').reduce((s, e) => s + Number(e.amount || 0), 0))}
+                    </p>
+                    <p className="text-[10px] text-gray-400 font-mono">
+                      {garageMiscExpenses.filter((e) => e.category === 'TRAVEL_CONVEYANCE').length} entries
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Food & Refreshments */}
+              <div className="card p-3.5 bg-white dark:bg-[#0c101c] border border-amber-200/60 dark:border-amber-900/40 rounded-xl shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400">
+                      <Coffee className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-bold text-gray-900 dark:text-slate-100">Food & Refreshments</h5>
+                      <p className="text-[10px] text-gray-400">Meals, tea, staff lunch</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-amber-600 dark:text-amber-400 font-mono">
+                      {formatCurrency(garageMiscExpenses.filter((e) => e.category === 'FOOD_REFRESHMENTS').reduce((s, e) => s + Number(e.amount || 0), 0))}
+                    </p>
+                    <p className="text-[10px] text-gray-400 font-mono">
+                      {garageMiscExpenses.filter((e) => e.category === 'FOOD_REFRESHMENTS').length} entries
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Commission & Referral */}
+              <div className="card p-3.5 bg-white dark:bg-[#0c101c] border border-violet-200/60 dark:border-violet-900/40 rounded-xl shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400">
+                      <BadgePercent className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-bold text-gray-900 dark:text-slate-100">Commission & Brokerage</h5>
+                      <p className="text-[10px] text-gray-400">Driver & referral payouts</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-violet-600 dark:text-violet-400 font-mono">
+                      {formatCurrency(garageMiscExpenses.filter((e) => e.category === 'COMMISSION').reduce((s, e) => s + Number(e.amount || 0), 0))}
+                    </p>
+                    <p className="text-[10px] text-gray-400 font-mono">
+                      {garageMiscExpenses.filter((e) => e.category === 'COMMISSION').length} entries
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Miscellaneous & Petty Cash */}
+              <div className="card p-3.5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800 rounded-xl shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400">
+                      <CreditCard className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-bold text-gray-900 dark:text-slate-100">Petty Cash & Misc</h5>
+                      <p className="text-[10px] text-gray-400">General shop expenses</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-gray-800 dark:text-slate-200 font-mono">
+                      {formatCurrency(garageMiscExpenses.filter((e) => !['TRAVEL_CONVEYANCE', 'FOOD_REFRESHMENTS', 'COMMISSION'].includes(e.category)).reduce((s, e) => s + Number(e.amount || 0), 0))}
+                    </p>
+                    <p className="text-[10px] text-gray-400 font-mono">
+                      {garageMiscExpenses.filter((e) => !['TRAVEL_CONVEYANCE', 'FOOD_REFRESHMENTS', 'COMMISSION'].includes(e.category)).length} entries
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter pills & Table */}
+            <div className="card overflow-hidden bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
+              <div className="p-3 bg-gray-50/50 dark:bg-slate-900/40 border-b border-gray-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                <div className="inline-flex bg-white dark:bg-slate-950 p-1 rounded-lg border border-gray-200 dark:border-slate-800 text-[11px] font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setMiscSectionFilter('ALL')}
+                    className={`px-2.5 py-1 rounded-md transition-all ${
+                      miscSectionFilter === 'ALL'
+                        ? 'bg-primary-600 text-white shadow-xs'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-slate-400 dark:hover:text-white'
+                    }`}
+                  >
+                    All Categories ({garageMiscExpenses.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMiscSectionFilter('TRAVEL_CONVEYANCE')}
+                    className={`px-2.5 py-1 rounded-md transition-all ${
+                      miscSectionFilter === 'TRAVEL_CONVEYANCE'
+                        ? 'bg-teal-600 text-white shadow-xs'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-slate-400 dark:hover:text-white'
+                    }`}
+                  >
+                    Travel & Fuel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMiscSectionFilter('FOOD_REFRESHMENTS')}
+                    className={`px-2.5 py-1 rounded-md transition-all ${
+                      miscSectionFilter === 'FOOD_REFRESHMENTS'
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-slate-400 dark:hover:text-white'
+                    }`}
+                  >
+                    Food & Meals
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMiscSectionFilter('COMMISSION')}
+                    className={`px-2.5 py-1 rounded-md transition-all ${
+                      miscSectionFilter === 'COMMISSION'
+                        ? 'bg-violet-600 text-white shadow-xs'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-slate-400 dark:hover:text-white'
+                    }`}
+                  >
+                    Commission
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMiscSectionFilter('MISCELLANEOUS')}
+                    className={`px-2.5 py-1 rounded-md transition-all ${
+                      miscSectionFilter === 'MISCELLANEOUS'
+                        ? 'bg-slate-700 text-white shadow-xs'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-slate-400 dark:hover:text-white'
+                    }`}
+                  >
+                    Petty Cash / Misc
+                  </button>
+                </div>
+
+                <span className="text-[11px] text-gray-400 dark:text-slate-500 font-mono">
+                  {filteredMiscExpenses.length} records shown
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-800">
+                  <thead className="bg-gray-50 dark:bg-slate-900/60">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Exp #
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Expense Title & Purpose
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Category
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Payee / Vendor
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Mode
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Invoice / Ref
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                        Amount (₹)
+                      </th>
+                      {canManageFinances && (
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-slate-800 text-xs">
+                    {isGarageMiscLoading ? (
+                      <tr>
+                        <td colSpan={7 + (canManageFinances ? 1 : 0)} className="text-center py-8">
+                          <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-amber-500"></div>
+                          <p className="mt-2 text-xs text-gray-400">Loading work expenses...</p>
+                        </td>
+                      </tr>
+                    ) : filteredMiscExpenses.length === 0 ? (
+                      <tr>
+                        <td colSpan={7 + (canManageFinances ? 1 : 0)} className="text-center py-8">
+                          <Coffee className="mx-auto h-7 w-7 text-gray-400" />
+                          <p className="mt-2 text-sm font-medium text-gray-900 dark:text-slate-100">
+                            No operational work expenses recorded yet
+                          </p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            Click "+ Travel / Fuel", "+ Food / Meals", or "+ Commission" above to record out-of-pocket expenses for garage work.
+                          </p>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredMiscExpenses.map((exp) => {
+                        const catConfig = CATEGORY_CONFIG[exp.category] || CATEGORY_CONFIG.MISCELLANEOUS;
+                        return (
+                          <tr key={exp.id} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/40">
+                            <td className="px-4 py-3 font-mono font-medium text-gray-900 dark:text-slate-200 whitespace-nowrap">
+                              {exp.expense_number}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 dark:text-slate-400 font-mono whitespace-nowrap">
+                              {safeFormatDate(exp.expense_date, 'dd MMM yyyy')}
+                            </td>
+                            <td className="px-4 py-3 max-w-xs">
+                              <div className="font-semibold text-gray-900 dark:text-slate-100 truncate">
+                                {exp.title}
+                              </div>
+                              {exp.notes && (
+                                <p className="text-[11px] text-gray-500 dark:text-slate-400 font-normal truncate mt-0.5">
+                                  {exp.notes}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${catConfig.badgeClass}`}>
+                                <catConfig.icon className="h-3 w-3" />
+                                <span>{catConfig.label}</span>
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-700 dark:text-slate-300 whitespace-nowrap">
+                              {exp.staff_name ? (
+                                <span className="flex items-center gap-1 font-medium text-amber-600 dark:text-amber-400">
+                                  <Users className="h-3 w-3" />
+                                  {exp.staff_name}
+                                </span>
+                              ) : (
+                                exp.payee_recipient || '-'
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 dark:text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                              {exp.payment_method}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-gray-500 dark:text-slate-400 whitespace-nowrap">
+                              {exp.invoice_reference || '-'}
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-sm text-gray-900 dark:text-slate-100 font-mono whitespace-nowrap">
+                              {formatCurrency(exp.amount)}
+                            </td>
+                            {canManageFinances && (
+                              <td className="px-4 py-3 text-right whitespace-nowrap">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={() => handleOpenEditModal(exp)}
+                                    className="p-1.5 rounded-lg text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-primary-400 dark:hover:bg-slate-800"
+                                    title="Edit Expense"
+                                  >
+                                    <Edit3 className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setDeletingExpense(exp);
+                                      setIsDeleteModalOpen(true);
+                                    }}
+                                    className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-red-950/40"
+                                    title="Delete Expense"
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </button>
