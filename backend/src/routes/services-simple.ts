@@ -1,6 +1,6 @@
 import express from 'express';
 import { query } from '../database/connection';
-import { AuthRequest, requireRole, requireRoleOrScope } from '../middleware/auth';
+import { AuthRequest, requireRole, requireRoleOrScope, canViewCost } from '../middleware/auth';
 import Joi from 'joi';
 
 const router = express.Router();
@@ -183,8 +183,15 @@ router.get('/', async (req: AuthRequest, res) => {
 
     const result = await query(queryText, params);
 
+    const allowCost = canViewCost(req.user);
+    const sanitizedServices = result.rows.map(row => ({
+      ...row,
+      defaultCost: allowCost ? row.defaultCost : null,
+      default_cost: allowCost ? row.default_cost : null
+    }));
+
     res.json({
-      services: result.rows,
+      services: sanitizedServices,
       pagination: {
         total,
         page: pageNum || 1,
@@ -220,7 +227,14 @@ router.get('/:id', async (req: AuthRequest, res) => {
       return res.status(404).json({ message: 'Service not found' });
     }
 
-    res.json({ service: result.rows[0] });
+    const allowCost = canViewCost(req.user);
+    const service = {
+      ...result.rows[0],
+      defaultCost: allowCost ? result.rows[0].defaultCost : null,
+      default_cost: allowCost ? result.rows[0].default_cost : null
+    };
+
+    res.json({ service });
   } catch (error) {
     console.error('Get service error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -236,9 +250,10 @@ router.post('/', requireRoleOrScope(['TECHNICIAN', 'MANAGER'], 'services'), asyn
     }
 
     const { name, description, category, price, duration } = value;
+    const allowCost = canViewCost(req.user);
     const finalServiceType = value.serviceType || value.service_type || 'LABOR';
     const finalVendor = value.defaultVendor || value.default_vendor || null;
-    const finalCost = value.defaultCost ?? value.default_cost ?? 0;
+    const finalCost = allowCost ? (value.defaultCost ?? value.default_cost ?? 0) : 0;
 
     // Check if service already exists
     const existingService = await query(
@@ -295,9 +310,12 @@ router.put('/:id', requireRoleOrScope(['TECHNICIAN', 'MANAGER'], 'services'), as
       return res.status(400).json({ message: 'Another service with this name already exists' });
     }
 
+    const allowCost = canViewCost(req.user);
     const finalServiceType = value.serviceType || value.service_type || existingService.rows[0].service_type || 'LABOR';
     const finalVendor = value.defaultVendor !== undefined ? value.defaultVendor : (value.default_vendor !== undefined ? value.default_vendor : existingService.rows[0].default_vendor);
-    const finalCost = value.defaultCost !== undefined ? value.defaultCost : (value.default_cost !== undefined ? value.default_cost : existingService.rows[0].default_cost);
+    const finalCost = allowCost
+      ? (value.defaultCost !== undefined ? value.defaultCost : (value.default_cost !== undefined ? value.default_cost : existingService.rows[0].default_cost))
+      : existingService.rows[0].default_cost;
 
     // Update service
     const result = await query(
@@ -315,7 +333,13 @@ router.put('/:id', requireRoleOrScope(['TECHNICIAN', 'MANAGER'], 'services'), as
       [name, description || null, category || 'General', finalServiceType, finalVendor, finalCost, price, duration || 60, id]
     );
 
-    res.json({ service: result.rows[0] });
+    const service = {
+      ...result.rows[0],
+      defaultCost: allowCost ? result.rows[0].defaultCost : null,
+      default_cost: allowCost ? result.rows[0].default_cost : null
+    };
+
+    res.json({ service });
   } catch (error) {
     console.error('Update service error:', error);
     res.status(500).json({ message: 'Internal server error' });

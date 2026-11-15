@@ -1,6 +1,6 @@
 import express from 'express';
 import { query } from '../database/connection';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest, canViewCost, canViewRetail } from '../middleware/auth';
 import Joi from 'joi';
 import { generateExpenseNumber } from './financial-simple';
 
@@ -109,7 +109,13 @@ router.get('/', async (req: AuthRequest, res) => {
     queryText += ` ORDER BY jc.created_at DESC`;
 
     const result = await query(queryText, queryParams);
-    res.json({ jobCards: result.rows });
+    const allowRetail = canViewRetail(req.user);
+    const sanitizedJobCards = result.rows.map(jc => ({
+      ...jc,
+      estimated_cost: allowRetail ? jc.estimated_cost : null,
+      actual_cost: allowRetail ? jc.actual_cost : null
+    }));
+    res.json({ jobCards: sanitizedJobCards });
   } catch (error: any) {
     console.error('Get job cards error:', error);
     res.status(500).json({ message: 'Internal server error', error: error.message });
@@ -187,14 +193,40 @@ router.get('/:id', async (req: AuthRequest, res) => {
       ORDER BY jcsp.created_at ASC
     `, [id]);
 
-    res.json({
-      jobCard: {
-        ...jobCard,
-        technicians: techResult.rows,
-        services: servicesResult.rows,
-        spareParts: partsResult.rows
-      }
-    });
+    const allowCost = canViewCost(req.user);
+    const allowRetail = canViewRetail(req.user);
+
+    const sanitizedParts = partsResult.rows.map(p => ({
+      ...p,
+      cost: allowCost ? p.cost : null,
+      garage_cost: allowCost ? p.garage_cost : null,
+      procured_cost: allowCost ? p.procured_cost : null,
+      procurement_cost: allowCost ? p.procurement_cost : null,
+      unit_price: allowRetail ? p.unit_price : null,
+      total_price: allowRetail ? p.total_price : null
+    }));
+
+    const sanitizedServices = servicesResult.rows.map(s => ({
+      ...s,
+      cost_price: allowCost ? s.cost_price : null,
+      procured_cost: allowCost ? s.procured_cost : null,
+      procurement_cost: allowCost ? s.procurement_cost : null,
+      sublet_garage_cost: allowCost ? s.sublet_garage_cost : null,
+      hourly_rate: allowRetail ? s.hourly_rate : null,
+      unit_price: allowRetail ? s.unit_price : null,
+      total_price: allowRetail ? s.total_price : null
+    }));
+
+    const sanitizedJobCard = {
+      ...jobCard,
+      estimated_cost: allowRetail ? jobCard.estimated_cost : null,
+      actual_cost: allowRetail ? jobCard.actual_cost : null,
+      technicians: techResult.rows,
+      services: sanitizedServices,
+      spareParts: sanitizedParts
+    };
+
+    res.json({ jobCard: sanitizedJobCard });
   } catch (error: any) {
     console.error('Get job card details error:', error);
     res.status(500).json({ message: 'Internal server error', error: error.message });
@@ -1067,6 +1099,9 @@ router.delete('/:id', async (req: AuthRequest, res) => {
 // Mark spare part as procured and record direct OpEx expense in garage_expenses
 router.post('/:id/spare-parts/:partId/procure', async (req: AuthRequest, res) => {
   try {
+    if (!canViewCost(req.user)) {
+      return res.status(403).json({ message: 'Access denied: requires garage cost or financial permission' });
+    }
     const { id, partId } = req.params;
     const {
       procuredCost,
@@ -1152,6 +1187,9 @@ router.post('/:id/spare-parts/:partId/procure', async (req: AuthRequest, res) =>
 // Unmark procurement and delete expense from garage_expenses
 router.delete('/:id/spare-parts/:partId/procure', async (req: AuthRequest, res) => {
   try {
+    if (!canViewCost(req.user)) {
+      return res.status(403).json({ message: 'Access denied: requires garage cost or financial permission' });
+    }
     const { id, partId } = req.params;
 
     const partRes = await query('SELECT * FROM job_card_spare_parts WHERE id = $1 AND job_card_id = $2', [partId, id]);
@@ -1189,6 +1227,9 @@ router.delete('/:id/spare-parts/:partId/procure', async (req: AuthRequest, res) 
 // Mark external sublet service as procured / paid to lab and record direct OpEx expense in garage_expenses
 router.post('/:id/services/:serviceId/procure', async (req: AuthRequest, res) => {
   try {
+    if (!canViewCost(req.user)) {
+      return res.status(403).json({ message: 'Access denied: requires garage cost or financial permission' });
+    }
     const { id, serviceId } = req.params;
     const {
       procuredCost,
@@ -1274,6 +1315,9 @@ router.post('/:id/services/:serviceId/procure', async (req: AuthRequest, res) =>
 // Unmark sublet service procurement and delete expense from garage_expenses
 router.delete('/:id/services/:serviceId/procure', async (req: AuthRequest, res) => {
   try {
+    if (!canViewCost(req.user)) {
+      return res.status(403).json({ message: 'Access denied: requires garage cost or financial permission' });
+    }
     const { id, serviceId } = req.params;
 
     const sRes = await query('SELECT * FROM job_card_services WHERE id = $1 AND job_card_id = $2', [serviceId, id]);

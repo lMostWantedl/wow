@@ -1,6 +1,6 @@
 import express from 'express';
 import { query } from '../database/connection';
-import { AuthRequest, requireRole } from '../middleware/auth';
+import { AuthRequest, requireRole, requireRoleOrScope } from '../middleware/auth';
 import Joi from 'joi';
 
 const router = express.Router();
@@ -36,7 +36,7 @@ const paymentSchema = Joi.object({
 });
 
 // Get all bills
-router.get('/', async (req: AuthRequest, res) => {
+router.get('/', requireRoleOrScope(['MANAGER', 'CUSTOMER'], 'bills'), async (req: AuthRequest, res) => {
   try {
     const { user } = req;
     let queryText = `
@@ -78,7 +78,7 @@ router.get('/', async (req: AuthRequest, res) => {
 });
 
 // Get bill by ID
-router.get('/:id', async (req: AuthRequest, res) => {
+router.get('/:id', requireRoleOrScope(['MANAGER', 'CUSTOMER'], 'bills'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { user } = req;
@@ -159,7 +159,7 @@ router.get('/:id', async (req: AuthRequest, res) => {
 });
 
 // Create new bill
-router.post('/', requireRole(['TECHNICIAN', 'MANAGER']), async (req: AuthRequest, res) => {
+router.post('/', requireRoleOrScope(['MANAGER'], 'bills'), async (req: AuthRequest, res) => {
   try {
     const { error, value } = createBillSchema.validate(req.body);
     if (error) {
@@ -234,7 +234,7 @@ router.post('/', requireRole(['TECHNICIAN', 'MANAGER']), async (req: AuthRequest
 });
 
 // Update bill
-router.put('/:id', requireRole(['TECHNICIAN', 'MANAGER']), async (req: AuthRequest, res) => {
+router.put('/:id', requireRoleOrScope(['MANAGER'], 'bills'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { error, value } = createBillSchema.validate(req.body);
@@ -324,7 +324,7 @@ router.put('/:id', requireRole(['TECHNICIAN', 'MANAGER']), async (req: AuthReque
 });
 
 // Add payment to bill
-router.post('/:id/payments', requireRole(['TECHNICIAN', 'MANAGER']), async (req: AuthRequest, res) => {
+router.post('/:id/payments', requireRoleOrScope(['MANAGER'], 'bills'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { error, value } = paymentSchema.validate(req.body);
@@ -388,7 +388,7 @@ router.post('/:id/payments', requireRole(['TECHNICIAN', 'MANAGER']), async (req:
 });
 
 // Get payments for a bill
-router.get('/:id/payments', async (req: AuthRequest, res) => {
+router.get('/:id/payments', requireRoleOrScope(['MANAGER', 'CUSTOMER'], 'bills'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const result = await query(

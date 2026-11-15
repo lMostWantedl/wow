@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useMutation, useQueryClient } from 'react-query';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
+import { useAuth } from '../contexts/AuthContext';
 import { servicesService } from '../services/services';
 import { ArrowLeft, Save, Wrench, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -33,6 +34,10 @@ interface CreateServiceFormData {
 const CreateService: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const userScopes: string[] = user?.scopes || [];
+  const isManager = user?.role === 'MANAGER';
+  const canViewCost = isManager || userScopes.includes('view_garage_cost') || userScopes.includes('financial');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<CreateServiceFormData>({
@@ -57,7 +62,7 @@ const CreateService: React.FC = () => {
       category: data.category || 'General',
       serviceType: data.serviceType,
       defaultVendor: data.serviceType === 'EXTERNAL_SERVICE' ? (data.defaultVendor || undefined) : undefined,
-      defaultCost: data.serviceType === 'EXTERNAL_SERVICE' ? (Number(data.defaultCost) || 0) : undefined,
+      defaultCost: (data.serviceType === 'EXTERNAL_SERVICE' && canViewCost) ? (Number(data.defaultCost) || 0) : undefined,
       price: data.basePrice,
       duration: data.duration
     }),
@@ -195,19 +200,21 @@ const CreateService: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-                  Default Sublet Procurement Cost (₹)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  className="input w-full text-xs font-mono"
-                  {...register('defaultCost')}
-                  placeholder="0.00"
-                />
-              </div>
+              {canViewCost && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                    Default Sublet Procurement Cost (₹)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="input w-full text-xs font-mono"
+                    {...register('defaultCost')}
+                    placeholder="0.00"
+                  />
+                </div>
+              )}
             </div>
           )}
 

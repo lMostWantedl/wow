@@ -1,6 +1,6 @@
 import express from 'express';
 import { query } from '../database/connection';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest, canViewCost, canViewRetail } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -184,12 +184,29 @@ router.get('/', async (req: AuthRequest, res) => {
         (jc: any) => ['COMPLETED', 'INVOICED'].includes(jc.status)
       ).length;
 
+      const allowRetail = canViewRetail(user);
+      const allowCost = canViewCost(user);
+
+      const sanitizedTechBills = billsResult.rows.map((b: any) => ({
+        ...b,
+        subtotal: allowRetail ? b.subtotal : null,
+        tax_amount: allowRetail ? b.tax_amount : null,
+        total_amount: allowRetail ? b.total_amount : null,
+        paid_amount: allowRetail ? b.paid_amount : null
+      }));
+
+      const sanitizedTechJobCards = technicianJobCardsResult.rows.map((jc: any) => ({
+        ...jc,
+        estimated_cost: allowRetail ? jc.estimated_cost : null,
+        actual_cost: allowRetail ? jc.actual_cost : null
+      }));
+
       dashboardData.data = {
-        bills: billsResult.rows,
-        technicianRevenue: parseFloat(revenueResult.rows[0]?.total || '0'),
-        recentBills: billsResult.rows.slice(0, 5),
+        bills: sanitizedTechBills,
+        technicianRevenue: allowRetail ? parseFloat(revenueResult.rows[0]?.total || '0') : null,
+        recentBills: sanitizedTechBills.slice(0, 5),
         billCount: billsResult.rows.length,
-        jobCards: technicianJobCardsResult.rows,
+        jobCards: sanitizedTechJobCards,
         activeJobCardsCount: activeTechJobs,
         completedJobCardsCount: completedTechJobs
       };
@@ -289,9 +306,14 @@ router.get('/', async (req: AuthRequest, res) => {
         console.warn('Error querying job card statistics:', jcErr);
       }
 
+      const allowRetail = canViewRetail(user);
+      const allowCost = canViewCost(user);
+
       // Map database field names to frontend expected field names for low stock items
       const mappedLowStockItems = lowStockResult.rows.map(part => ({
         ...part,
+        cost: allowCost ? part.cost : null,
+        cost_price: allowCost ? part.cost_price : null,
         partNumber: part.part_number,
         stock: part.stock_quantity,
         minStock: part.min_stock_level,
@@ -300,14 +322,28 @@ router.get('/', async (req: AuthRequest, res) => {
         updatedAt: part.updated_at
       }));
 
+      const sanitizedManagerBills = billsResult.rows.map((b: any) => ({
+        ...b,
+        subtotal: allowRetail ? b.subtotal : null,
+        tax_amount: allowRetail ? b.tax_amount : null,
+        total_amount: allowRetail ? b.total_amount : null,
+        paid_amount: allowRetail ? b.paid_amount : null
+      }));
+
+      const sanitizedManagerJobCards = recentJobCards.map((jc: any) => ({
+        ...jc,
+        estimated_cost: allowRetail ? jc.estimated_cost : null,
+        actual_cost: allowRetail ? jc.actual_cost : null
+      }));
+
       dashboardData.data = {
         totalBills: billsResult.rows.length,
-        managerRevenue: parseFloat(revenueResult.rows[0]?.total || '0'),
+        managerRevenue: allowRetail ? parseFloat(revenueResult.rows[0]?.total || '0') : null,
         totalCustomers: parseInt(customersResult.rows[0]?.count || '0', 10),
         totalSpareParts: parseInt(sparePartsResult.rows[0]?.count || '0', 10),
         lowStockItems: mappedLowStockItems,
         pendingBills: parseInt(pendingBillsResult.rows[0]?.count || '0', 10),
-        managerRecentBills: billsResult.rows.slice(0, 10),
+        managerRecentBills: sanitizedManagerBills.slice(0, 10),
         monthlyRevenue: [],
         // Job Cards Data
         totalJobCards,
@@ -315,7 +351,7 @@ router.get('/', async (req: AuthRequest, res) => {
         inProgressJobCardsCount,
         readyOrEstimatedJobCardsCount,
         completedJobCardsCount,
-        recentJobCards
+        recentJobCards: sanitizedManagerJobCards
       };
     }
 

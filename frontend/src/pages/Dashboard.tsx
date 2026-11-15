@@ -89,6 +89,10 @@ const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const [period, setPeriod] = useState('month');
 
+  const userScopes: string[] = user?.scopes || [];
+  const isManager = user?.role === 'MANAGER';
+  const canViewRetail = isManager || userScopes.includes('view_customer_retail') || userScopes.includes('financial');
+
   // Safe date formatting helper
   const safeFormatDate = (dateString: string | null | undefined, formatString: string = 'MMM dd, yyyy'): string => {
     if (!dateString) return 'N/A';
@@ -108,7 +112,7 @@ const Dashboard: React.FC = () => {
     ['statistics', period],
     () => dashboardService.getStatistics(period, 'revenue'),
     {
-      enabled: user?.role === 'MANAGER',
+      enabled: user?.role === 'MANAGER' && canViewRetail,
     }
   );
 
@@ -316,7 +320,7 @@ const Dashboard: React.FC = () => {
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Revenue Generated</p>
                   <p className="text-2xl font-bold text-gray-900 dark:text-slate-100">
-                    ₹{(data.technicianRevenue || 0).toLocaleString()}
+                    {canViewRetail ? `₹${(data.technicianRevenue || 0).toLocaleString()}` : '••••••'}
                   </p>
                 </div>
               </div>
@@ -518,7 +522,7 @@ const Dashboard: React.FC = () => {
               <div className="mt-3">
                 <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Revenue</p>
                 <p className="text-2xl font-extrabold text-gray-900 dark:text-slate-100 mt-0.5">
-                  ₹{(data.managerRevenue || 0).toLocaleString()}
+                  {canViewRetail ? `₹${(data.managerRevenue || 0).toLocaleString()}` : '••••••'}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-1">This {period}</p>
               </div>
@@ -805,7 +809,7 @@ const Dashboard: React.FC = () => {
           </div>
 
           {/* Revenue Chart */}
-          {statistics && (
+          {statistics && canViewRetail && (
             <div className="card border border-gray-200 dark:border-slate-800 dark:bg-slate-850">
               <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-800">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Revenue Trend</h3>

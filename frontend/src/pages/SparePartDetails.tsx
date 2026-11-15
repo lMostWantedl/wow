@@ -1,12 +1,17 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from 'react-query';
+import { useAuth } from '../contexts/AuthContext';
 import { sparePartsService } from '../services/spareParts';
 import { ArrowLeft, Edit, Package, AlertTriangle, Car, Info } from 'lucide-react';
 
 const SparePartDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const userScopes: string[] = user?.scopes || [];
+  const isManager = user?.role === 'MANAGER';
+  const canViewCost = isManager || userScopes.includes('view_garage_cost') || userScopes.includes('financial');
 
   const { data: sparePartResponse, isLoading, error } = useQuery(
     ['spare-part', id],
@@ -192,22 +197,28 @@ const SparePartDetails: React.FC = () => {
                 <label className="font-semibold text-gray-500 dark:text-slate-400 block mb-1">Selling Price</label>
                 <p className="text-lg font-bold text-gray-900 dark:text-white">₹{(sparePart.price || 0).toLocaleString()}</p>
               </div>
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-gray-100 dark:border-slate-800">
-                <label className="font-semibold text-gray-500 dark:text-slate-400 block mb-1">Cost Price (COGS)</label>
-                <p className="text-lg font-bold text-gray-900 dark:text-white">₹{(sparePart.cost || 0).toLocaleString()}</p>
-              </div>
-              <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50">
-                <label className="font-semibold text-emerald-700 dark:text-emerald-400 block mb-1">Profit Margin</label>
-                <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                  ₹{((sparePart.price || 0) - (sparePart.cost || 0)).toLocaleString()}
-                </p>
-              </div>
-              <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50">
-                <label className="font-semibold text-emerald-700 dark:text-emerald-400 block mb-1">Margin %</label>
-                <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                  {sparePart.cost ? (((sparePart.price || 0) - (sparePart.cost || 0)) / (sparePart.cost || 1) * 100).toFixed(1) : '0.0'}%
-                </p>
-              </div>
+              {canViewCost && (
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-gray-100 dark:border-slate-800">
+                  <label className="font-semibold text-gray-500 dark:text-slate-400 block mb-1">Cost Price (COGS)</label>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white">₹{(sparePart.cost || 0).toLocaleString()}</p>
+                </div>
+              )}
+              {canViewCost && (
+                <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50">
+                  <label className="font-semibold text-emerald-700 dark:text-emerald-400 block mb-1">Profit Margin</label>
+                  <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                    ₹{((sparePart.price || 0) - (sparePart.cost || 0)).toLocaleString()}
+                  </p>
+                </div>
+              )}
+              {canViewCost && (
+                <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50">
+                  <label className="font-semibold text-emerald-700 dark:text-emerald-400 block mb-1">Margin %</label>
+                  <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                    {sparePart.cost ? (((sparePart.price || 0) - (sparePart.cost || 0)) / (sparePart.cost || 1) * 100).toFixed(1) : '0.0'}%
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>

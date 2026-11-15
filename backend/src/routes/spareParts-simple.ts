@@ -1,6 +1,6 @@
 import express from 'express';
 import { query } from '../database/connection';
-import { AuthRequest, requireRole, requireRoleOrScope } from '../middleware/auth';
+import { AuthRequest, requireRole, requireRoleOrScope, canViewCost } from '../middleware/auth';
 import Joi from 'joi';
 
 const router = express.Router();
@@ -24,7 +24,7 @@ const createSparePartSchema = Joi.object({
   makeId: Joi.string().uuid().allow('', null).optional(),
   modelId: Joi.string().uuid().allow('', null).optional(),
   price: Joi.number().min(0).required(),
-  cost: Joi.number().min(0).required(),
+  cost: Joi.number().min(0).allow(null, '').optional(),
   stock: Joi.number().min(0).default(0),
   minStock: Joi.number().min(0).default(5),
   unit: Joi.string().valid('pieces', 'sets', 'pairs', 'liters', 'ml', 'kg', 'grams', 'gallons', 'quarts', 'pints', 'lbs', 'oz').default('pieces'),
@@ -36,10 +36,11 @@ const createSparePartSchema = Joi.object({
 }).unknown(true);
 
 // Helper to map DB row to frontend camelCase object
-export const mapSparePart = (part: any) => ({
+export const mapSparePart = (part: any, allowCost: boolean = true) => ({
   ...part,
   partNumber: part.part_number,
   oemPartNumber: part.oem_part_number || '',
+  cost: allowCost ? (part.cost != null ? parseFloat(part.cost) : 0) : null,
   stock: part.stock_quantity != null ? parseFloat(part.stock_quantity) : 0,
   minStock: part.min_stock_level != null ? parseFloat(part.min_stock_level) : 5,
   unit: part.unit,
@@ -173,9 +174,10 @@ router.get('/', async (req: AuthRequest, res) => {
     }
 
     const result = await query(queryText, params);
+    const allowCost = canViewCost(req.user);
     
     res.json({
-      spareParts: result.rows.map(mapSparePart),
+      spareParts: result.rows.map(p => mapSparePart(p, allowCost)),
       pagination: {
         total,
         page: pageNum || 1,
@@ -328,7 +330,8 @@ router.get('/:id', async (req: AuthRequest, res) => {
       return res.status(404).json({ message: 'Spare part not found' });
     }
     
-    res.json({ sparePart: mapSparePart(result.rows[0]) });
+    const allowCost = canViewCost(req.user);
+    res.json({ sparePart: mapSparePart(result.rows[0], allowCost) });
   } catch (error) {
     console.error('Get spare part error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -382,6 +385,9 @@ router.post('/', requireRoleOrScope(['TECHNICIAN', 'MANAGER'], 'spare_parts'), a
       }
     }
 
+    const allowCost = canViewCost(req.user);
+    const finalCost = (allowCost && cost !== undefined && cost !== null && cost !== '') ? parseFloat(cost) : 0;
+
     // Insert spare part
     const result = await query(`
       INSERT INTO spare_parts (
@@ -417,7 +423,7 @@ router.post('/', requireRoleOrScope(['TECHNICIAN', 'MANAGER'], 'spare_parts'), a
       makeId || null,
       modelId || null,
       price,
-      cost,
+      finalCost,
       stock || 0,
       minStock !== undefined ? minStock : 5,
       unit || 'pieces',
@@ -426,7 +432,7 @@ router.post('/', requireRoleOrScope(['TECHNICIAN', 'MANAGER'], 'spare_parts'), a
       description || null
     ]);
 
-    res.status(201).json({ sparePart: mapSparePart(result.rows[0]) });
+    res.status(201).json({ sparePart: mapSparePart(result.rows[0], allowCost) });
   } catch (error) {
     console.error('Create spare part error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -470,7 +476,7 @@ router.put('/:id', requireRoleOrScope(['TECHNICIAN', 'MANAGER'], 'spare_parts'),
     } = value;
 
     // Check if spare part exists
-    const existingPart = await query('SELECT id FROM spare_parts WHERE id = $1', [id]);
+    const existingPart = await query('SELECT * FROM spare_parts WHERE id = $1', [id]);
     if (existingPart.rows.length === 0) {
       return res.status(404).json({ message: 'Spare part not found' });
     }
@@ -486,6 +492,11 @@ router.put('/:id', requireRoleOrScope(['TECHNICIAN', 'MANAGER'], 'spare_parts'),
         return res.status(400).json({ message: 'Another spare part with this part number already exists' });
       }
     }
+
+    const allowCost = canViewCost(req.user);
+    const finalCost = (allowCost && cost !== undefined && cost !== null && cost !== '') 
+      ? parseFloat(cost) 
+      : parseFloat(existingPart.rows[0].cost || '0');
 
     // Update spare part
     const result = await query(`
@@ -535,7 +546,7 @@ router.put('/:id', requireRoleOrScope(['TECHNICIAN', 'MANAGER'], 'spare_parts'),
       makeId || null,
       modelId || null,
       price,
-      cost,
+      finalCost,
       stock || 0,
       minStock !== undefined ? minStock : 5,
       unit || 'pieces',
@@ -545,7 +556,7 @@ router.put('/:id', requireRoleOrScope(['TECHNICIAN', 'MANAGER'], 'spare_parts'),
       id
     ]);
 
-    res.json({ sparePart: mapSparePart(result.rows[0]) });
+    res.json({ sparePart: mapSparePart(result.rows[0], allowCost) });
   } catch (error) {
     console.error('Update spare part error:', error);
     res.status(500).json({ message: 'Internal server error' });

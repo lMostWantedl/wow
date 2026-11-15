@@ -124,3 +124,13 @@ export const requireRoleOrScope = (roles: string[], scope?: string | string[]) =
     return res.status(403).json({ message: 'Insufficient permissions' });
   };
 };
+
+export const canViewCost = (user?: { role: string; scopes: string[] }): boolean => {
+  if (!user) return false;
+  return user.role === 'MANAGER' || (user.scopes || []).includes('view_garage_cost') || (user.scopes || []).includes('financial');
+};
+
+export const canViewRetail = (user?: { role: string; scopes: string[] }): boolean => {
+  if (!user) return false;
+  return user.role === 'MANAGER' || (user.scopes || []).includes('view_customer_retail') || (user.scopes || []).includes('financial');
+};

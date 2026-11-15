@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from 'react-query';
+import { useAuth } from '../contexts/AuthContext';
 import { sparePartsService } from '../services/spareParts';
 import { ArrowLeft, Save, Plus, Car, Wrench, ShieldCheck, Info } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -15,6 +16,11 @@ import {
 const CreateSparePart: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const userScopes: string[] = user?.scopes || [];
+  const isManager = user?.role === 'MANAGER';
+  const canViewCost = isManager || userScopes.includes('view_garage_cost') || userScopes.includes('financial');
+
   const [isAddingNewCategory, setIsAddingNewCategory] = useState(false);
   const [newCategoryInput, setNewCategoryInput] = useState('');
 
@@ -125,7 +131,7 @@ const CreateSparePart: React.FC = () => {
       yearStart: formData.yearStart ? parseInt(formData.yearStart, 10) : undefined,
       yearEnd: formData.yearEnd ? parseInt(formData.yearEnd, 10) : undefined,
       price: parseFloat(formData.price) || 0,
-      cost: parseFloat(formData.cost) || 0,
+      cost: canViewCost ? (parseFloat(formData.cost) || 0) : 0,
       stock: parseFloat(formData.stock) || 0,
       minStock: parseFloat(formData.minStock) || 0
     };
@@ -683,22 +689,23 @@ const CreateSparePart: React.FC = () => {
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
-                Cost Price (₹) *
-              </label>
-              <input
-                type="number"
-                name="cost"
-                value={formData.cost}
-                onChange={handleInputChange}
-                className="input w-full text-xs"
-                min="0"
-                step="0.01"
-                placeholder="950.00"
-                required
-              />
-            </div>
+            {canViewCost && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  Cost Price (₹)
+                </label>
+                <input
+                  type="number"
+                  name="cost"
+                  value={formData.cost}
+                  onChange={handleInputChange}
+                  className="input w-full text-xs"
+                  min="0"
+                  step="0.01"
+                  placeholder="950.00"
+                />
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">

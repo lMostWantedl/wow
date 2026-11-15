@@ -1,6 +1,6 @@
 import express from 'express';
 import { query } from '../database/connection';
-import { AuthRequest, requireRoleOrScope } from '../middleware/auth';
+import { AuthRequest, requireRoleOrScope, canViewCost, canViewRetail } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -277,6 +277,9 @@ router.get('/report', requireRoleOrScope(['MANAGER'], ['financial', 'view_custom
       };
     });
 
+    const allowCost = canViewCost(req.user);
+    const allowRetail = canViewRetail(req.user);
+
     res.json({
       period,
       dateRange: {
@@ -284,62 +287,67 @@ router.get('/report', requireRoleOrScope(['MANAGER'], ['financial', 'view_custom
         endDate: endDate.toISOString()
       },
       summary: {
-        totalRevenue,
-        laborRevenue,
-        partsRevenue,
-        totalCosts: totalCogs + totalOpex,
-        cogs: totalCogs,
-        opex: totalOpex,
-        capex: totalCapex,
-        allTimeCapex,
-        allTimeInvestments,
-        capexRemainingBalance: allTimeInvestments - allTimeCapex,
-        allTimeRevenue,
-        allTimeOpex,
-        allTimeCogs,
-        allTimeGrossProfit,
-        allTimeNetProfit,
-        lifetimeRemainingBalance: allTimeInvestments + allTimeNetProfit - allTimeCapex,
-        periodRemainingBalance: allTimeInvestments + netProfit - allTimeCapex,
-        netWorkingCapital: allTimeInvestments + allTimeNetProfit - allTimeCapex,
-        grossProfit,
-        grossProfitMargin,
-        netProfit,
-        netProfitMargin,
+        totalRevenue: allowRetail ? totalRevenue : null,
+        laborRevenue: allowRetail ? laborRevenue : null,
+        partsRevenue: allowRetail ? partsRevenue : null,
+        totalCosts: allowCost ? totalCogs + totalOpex : null,
+        cogs: allowCost ? totalCogs : null,
+        opex: allowCost ? totalOpex : null,
+        capex: allowCost ? totalCapex : null,
+        allTimeCapex: allowCost ? allTimeCapex : null,
+        allTimeInvestments: allowCost ? allTimeInvestments : null,
+        capexRemainingBalance: allowCost ? allTimeInvestments - allTimeCapex : null,
+        allTimeRevenue: allowRetail ? allTimeRevenue : null,
+        allTimeOpex: allowCost ? allTimeOpex : null,
+        allTimeCogs: allowCost ? allTimeCogs : null,
+        allTimeGrossProfit: allowRetail && allowCost ? allTimeGrossProfit : null,
+        allTimeNetProfit: allowRetail && allowCost ? allTimeNetProfit : null,
+        lifetimeRemainingBalance: allowRetail && allowCost ? allTimeInvestments + allTimeNetProfit - allTimeCapex : null,
+        periodRemainingBalance: allowRetail && allowCost ? allTimeInvestments + netProfit - allTimeCapex : null,
+        netWorkingCapital: allowRetail && allowCost ? allTimeInvestments + allTimeNetProfit - allTimeCapex : null,
+        grossProfit: allowRetail && allowCost ? grossProfit : null,
+        grossProfitMargin: allowRetail && allowCost ? grossProfitMargin : null,
+        netProfit: allowRetail && allowCost ? netProfit : null,
+        netProfitMargin: allowRetail && allowCost ? netProfitMargin : null,
         totalBills: parseInt(revenueResult.rows[0].bill_count, 10) || 0,
-        paidRevenue: parseFloat(revenueResult.rows[0].paid_revenue) || 0,
-        pendingPayments: parseFloat(pendingResult.rows[0].pending_amount) || 0,
+        paidRevenue: allowRetail ? (parseFloat(revenueResult.rows[0].paid_revenue) || 0) : null,
+        pendingPayments: allowRetail ? (parseFloat(pendingResult.rows[0].pending_amount) || 0) : null,
         retailVsCost: {
-          partsRetail: partsRevenue,
-          partsCost: totalPartsCost,
-          partsMargin: partsRevenue - totalPartsCost,
-          partsMarginPct: partsRevenue > 0 ? ((partsRevenue - totalPartsCost) / partsRevenue) * 100 : 0,
-          subletRetail: subletRevenue,
-          subletCost: subletCost,
-          subletMargin: subletRevenue - subletCost,
-          subletMarginPct: subletRevenue > 0 ? ((subletRevenue - subletCost) / subletRevenue) * 100 : 0,
-          laborRetail: laborRevenue,
-          totalCustomerRetail: totalRevenue,
-          totalGarageCost: totalPartsCost + subletCost + totalOpex,
+          partsRetail: allowRetail ? partsRevenue : null,
+          partsCost: allowCost ? totalPartsCost : null,
+          partsMargin: allowRetail && allowCost ? partsRevenue - totalPartsCost : null,
+          partsMarginPct: allowRetail && allowCost && partsRevenue > 0 ? ((partsRevenue - totalPartsCost) / partsRevenue) * 100 : null,
+          subletRetail: allowRetail ? subletRevenue : null,
+          subletCost: allowCost ? subletCost : null,
+          subletMargin: allowRetail && allowCost ? subletRevenue - subletCost : null,
+          subletMarginPct: allowRetail && allowCost && subletRevenue > 0 ? ((subletRevenue - subletCost) / subletRevenue) * 100 : null,
+          laborRetail: allowRetail ? laborRevenue : null,
+          totalCustomerRetail: allowRetail ? totalRevenue : null,
+          totalGarageCost: allowCost ? totalPartsCost + subletCost + totalOpex : null,
         }
       },
-      expenseCategories: categoryExpensesResult.rows.map(r => ({
+      expenseCategories: allowCost ? categoryExpensesResult.rows.map(r => ({
         category: r.category,
         expenseType: r.expense_type,
         count: parseInt(r.count, 10),
         amount: parseFloat(r.amount)
+      })) : [],
+      monthlyTrends: monthlyTrends.map(trend => ({
+        ...trend,
+        revenue: allowRetail ? trend.revenue : null,
+        costs: allowCost ? trend.costs : null,
+        profit: allowRetail && allowCost ? trend.profit : null
       })),
-      monthlyTrends,
       billsByStatus: paymentStatusResult.rows.map(row => ({
         status: row.payment_status,
         count: parseInt(row.count, 10),
-        amount: parseFloat(row.amount)
+        amount: allowRetail ? parseFloat(row.amount) : null
       })),
       paymentsByStatus: paymentStatusResult.rows.map(row => ({
         status: row.payment_status,
         count: parseInt(row.count, 10),
-        totalAmount: parseFloat(row.amount),
-        paidAmount: row.payment_status === 'PAID' ? parseFloat(row.amount) : 0
+        totalAmount: allowRetail ? parseFloat(row.amount) : null,
+        paidAmount: allowRetail ? (row.payment_status === 'PAID' ? parseFloat(row.amount) : 0) : null
       }))
     });
   } catch (error: any) {
@@ -421,17 +429,24 @@ router.get('/profit-loss', requireRoleOrScope(['MANAGER'], ['financial', 'view_c
     const netProfit = grossProfit - totalOpex;
     const netProfitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
+    const allowCost = canViewCost(req.user);
+    const allowRetail = canViewRetail(req.user);
+
     res.json({
       period: {
         startDate: start.toISOString(),
         endDate: end.toISOString()
       },
-      income: {
+      income: allowRetail ? {
         totalRevenue,
         serviceRevenue,
         sparePartRevenue
+      } : {
+        totalRevenue: null,
+        serviceRevenue: null,
+        sparePartRevenue: null
       },
-      costs: {
+      costs: allowCost ? {
         sparePartCosts,
         partsProcurement: expensesByCategory['PARTS_PROCUREMENT'] || 0,
         subletServices: expensesByCategory['SUBLET_SERVICES'] || 0,
@@ -445,12 +460,31 @@ router.get('/profit-loss', requireRoleOrScope(['MANAGER'], ['financial', 'view_c
         insuranceTax: expensesByCategory['INSURANCE_TAX'] || 0,
         miscellaneous: expensesByCategory['MISCELLANEOUS'] || 0,
         totalOpex
+      } : {
+        sparePartCosts: null,
+        partsProcurement: null,
+        subletServices: null,
+        rent: null,
+        salaries: null,
+        toolsEquipment: null,
+        utilities: null,
+        consumables: null,
+        maintenance: null,
+        marketing: null,
+        insuranceTax: null,
+        miscellaneous: null,
+        totalOpex: null
       },
-      profit: {
+      profit: allowRetail && allowCost ? {
         grossProfit,
         grossProfitMargin,
         netProfit,
         netProfitMargin
+      } : {
+        grossProfit: null,
+        grossProfitMargin: null,
+        netProfit: null,
+        netProfitMargin: null
       }
     });
   } catch (error: any) {
@@ -482,14 +516,17 @@ router.get('/daily', requireRoleOrScope(['MANAGER'], ['financial', 'view_custome
       [targetDate]
     );
 
+    const allowCost = canViewCost(req.user);
+    const allowRetail = canViewRetail(req.user);
+
     res.json({
       date: targetDate.toISOString().split('T')[0],
       summary: {
-        totalRevenue: parseFloat(revenueResult.rows[0].total_revenue) || 0,
+        totalRevenue: allowRetail ? (parseFloat(revenueResult.rows[0].total_revenue) || 0) : null,
         totalBills: parseInt(revenueResult.rows[0].count, 10) || 0,
         totalPayments: parseInt(paymentsResult.rows[0].count, 10) || 0,
-        paymentsCollected: parseFloat(paymentsResult.rows[0].total) || 0,
-        dailyExpenses: parseFloat(expenseResult.rows[0].total) || 0
+        paymentsCollected: allowRetail ? (parseFloat(paymentsResult.rows[0].total) || 0) : null,
+        dailyExpenses: allowCost ? (parseFloat(expenseResult.rows[0].total) || 0) : null
       }
     });
   } catch (error: any) {
@@ -585,13 +622,22 @@ router.get('/expenses', requireRoleOrScope(['MANAGER'], ['financial', 'view_cust
     const totalCount = parseInt(totalResult.rows[0]?.total_count || '0', 10);
     const pages = Math.ceil(totalCount / limit) || 1;
 
+    const allowCost = canViewCost(req.user);
+    const allowRetail = canViewRetail(req.user);
+
+    const sanitizedExpenses = result.rows.map(exp => ({
+      ...exp,
+      amount: allowCost ? exp.amount : null,
+      customer_retail_price: allowRetail ? exp.customer_retail_price : null
+    }));
+
     res.json({
-      expenses: result.rows,
+      expenses: sanitizedExpenses,
       totals: {
         count: totalCount,
-        totalAmount: parseFloat(totalResult.rows[0]?.total_amount || '0'),
-        opexAmount: parseFloat(totalResult.rows[0]?.opex_amount || '0'),
-        capexAmount: parseFloat(totalResult.rows[0]?.capex_amount || '0')
+        totalAmount: allowCost ? parseFloat(totalResult.rows[0]?.total_amount || '0') : null,
+        opexAmount: allowCost ? parseFloat(totalResult.rows[0]?.opex_amount || '0') : null,
+        capexAmount: allowCost ? parseFloat(totalResult.rows[0]?.capex_amount || '0') : null
       },
       pagination: {
         page,
@@ -756,6 +802,9 @@ router.delete('/expenses/:id', requireRoleOrScope(['MANAGER'], 'financial'), asy
 // 8. STAFF SALARIES & PAYROLL SUMMARY
 // ============================================================================
 router.get('/salaries', requireRoleOrScope(['MANAGER'], ['financial', 'view_garage_cost']), async (req: AuthRequest, res) => {
+  if (!canViewCost(req.user)) {
+    return res.status(403).json({ message: 'Access denied: view_garage_cost or financial scope required' });
+  }
   try {
     const { year = new Date().getFullYear() } = req.query;
 
@@ -834,7 +883,10 @@ router.put('/staff-salary/:userId', requireRoleOrScope(['MANAGER'], 'financial')
 // ============================================================================
 
 // Get all investments & capital summary
-router.get('/investments', requireRoleOrScope(['MANAGER'], ['financial', 'view_customer_retail', 'view_garage_cost']), async (req: AuthRequest, res) => {
+router.get('/investments', requireRoleOrScope(['MANAGER'], ['financial', 'view_garage_cost']), async (req: AuthRequest, res) => {
+  if (!canViewCost(req.user)) {
+    return res.status(403).json({ message: 'Access denied: view_garage_cost or financial scope required' });
+  }
   try {
     const result = await query(`
       SELECT 

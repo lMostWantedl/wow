@@ -10,6 +10,7 @@ import { DEFAULT_SPARE_PART_CATEGORIES } from '../constants/sparePartOptions';
 import { format, isValid } from 'date-fns';
 import { useReactToPrint } from 'react-to-print';
 import toast from 'react-hot-toast';
+import { useAuth } from '../contexts/AuthContext';
 import {
   ClipboardList,
   ArrowLeft,
@@ -67,6 +68,12 @@ const JobCardDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  const userScopes: string[] = user?.scopes || [];
+  const isManager = user?.role === 'MANAGER';
+  const canViewCost = isManager || userScopes.includes('view_garage_cost') || userScopes.includes('financial');
+  const canViewRetail = isManager || userScopes.includes('view_customer_retail') || userScopes.includes('financial');
 
   // Print refs
   const jobCardPrintRef = useRef<HTMLDivElement>(null);
@@ -510,6 +517,10 @@ const JobCardDetails: React.FC = () => {
   );
 
   const openProcureModal = (type: 'PART' | 'SERVICE', item: any) => {
+    if (!canViewCost) {
+      toast.error('Permission denied: You cannot view or manage garage procurement costs');
+      return;
+    }
     let defaultCost = 0;
     if (type === 'PART') {
       const unitCost = Number(item.garage_cost) > 0
@@ -960,14 +971,16 @@ const JobCardDetails: React.FC = () => {
           )}
 
           {/* Print Quotation */}
-          <button
-            onClick={handlePrintQuotation}
-            className="btn btn-secondary flex items-center gap-1.5 text-xs py-2 px-3"
-            title="Print Estimate / Quotation"
-          >
-            <Printer className="h-4 w-4" />
-            <span>Quotation</span>
-          </button>
+          {canViewRetail && (
+            <button
+              onClick={handlePrintQuotation}
+              className="btn btn-secondary flex items-center gap-1.5 text-xs py-2 px-3"
+              title="Print Estimate / Quotation"
+            >
+              <Printer className="h-4 w-4" />
+              <span>Quotation</span>
+            </button>
+          )}
 
           {/* Print Job Card */}
           <button
@@ -1284,7 +1297,7 @@ const JobCardDetails: React.FC = () => {
 
           <div className="flex items-center gap-3">
             <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-              Labor Total: <span className="text-primary-600 dark:text-primary-400">{formatCurrency(totalLabor)}</span>
+              Labor Total: <span className="text-primary-600 dark:text-primary-400">{canViewRetail ? formatCurrency(totalLabor) : '••••••'}</span>
             </span>
             {!isLocked && (
               <button
@@ -1377,10 +1390,10 @@ const JobCardDetails: React.FC = () => {
                       {formatQuantity(item.hours_qty)} hr
                     </td>
                     <td className="py-3 px-4 text-right font-medium">
-                      {formatCurrency(item.unit_price)}
+                      {canViewRetail ? formatCurrency(item.unit_price) : '••••••'}
                     </td>
                     <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-slate-100">
-                      {formatCurrency(item.total_price)}
+                      {canViewRetail ? formatCurrency(item.total_price) : '••••••'}
                     </td>
                     {!isLocked && (
                       <td className="py-3 px-4 text-center">
@@ -1410,7 +1423,7 @@ const JobCardDetails: React.FC = () => {
         )}
 
         {/* Labor Subtotal Breakdown */}
-        {laborServices.length > 0 && (
+        {laborServices.length > 0 && canViewRetail && (
           <div className="p-3 bg-slate-50/70 dark:bg-slate-900/60 border-t border-gray-100 dark:border-slate-800 text-xs flex flex-wrap items-center justify-end gap-5">
             <span className="text-slate-500">
               Quotation Labor: <strong className="text-slate-800 dark:text-slate-200">{formatCurrency(initialLaborSubtotal)}</strong>
@@ -1451,7 +1464,7 @@ const JobCardDetails: React.FC = () => {
 
           <div className="flex items-center gap-3">
             <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-              External Total: <span className="text-indigo-600 dark:text-indigo-400">{formatCurrency(totalExternal)}</span>
+              External Total: <span className="text-indigo-600 dark:text-indigo-400">{canViewRetail ? formatCurrency(totalExternal) : '••••••'}</span>
             </span>
             {!isLocked && (
               <button
@@ -1480,7 +1493,9 @@ const JobCardDetails: React.FC = () => {
                   <th className="py-3 px-4 text-center">Qty / Jobs</th>
                   <th className="py-3 px-4 text-right">Billed Rate</th>
                   <th className="py-3 px-4 text-right">Total</th>
-                  <th className="py-3 px-4 text-left">Lab Procurement / Cash Outflow</th>
+                  {canViewCost && (
+                    <th className="py-3 px-4 text-left">Lab Procurement / Cash Outflow</th>
+                  )}
                   {!isLocked && <th className="py-3 px-4 text-center">Action</th>}
                 </tr>
               </thead>
@@ -1518,7 +1533,7 @@ const JobCardDetails: React.FC = () => {
                           <Building2 className="h-3 w-3 text-indigo-500" />
                           {item.vendor_name || 'Specialist Lab / Sublet Vendor'}
                         </span>
-                        {Number(item.cost_price) > 0 && (
+                        {canViewCost && Number(item.cost_price) > 0 && (
                           <span className="text-[10px] text-slate-400">
                             Sublet Cost: {formatCurrency(item.cost_price)}
                           </span>
@@ -1529,44 +1544,46 @@ const JobCardDetails: React.FC = () => {
                       {formatQuantity(item.hours_qty)}
                     </td>
                     <td className="py-3 px-4 text-right font-medium">
-                      {formatCurrency(item.unit_price)}
+                      {canViewRetail ? formatCurrency(item.unit_price) : '••••••'}
                     </td>
                     <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-slate-100">
-                      {formatCurrency(item.total_price)}
+                      {canViewRetail ? formatCurrency(item.total_price) : '••••••'}
                     </td>
-                    <td className="py-3 px-4">
-                      {item.is_procured ? (
-                        <div className="flex flex-col items-start gap-1">
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                            <span>Paid: {formatCurrency(item.procured_cost)}</span>
-                          </span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                            {item.procured_payment_method} · {item.procured_vendor || 'Lab'}
-                          </span>
+                    {canViewCost && (
+                      <td className="py-3 px-4">
+                        {item.is_procured ? (
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                              <span>Paid: {formatCurrency(item.procured_cost)}</span>
+                            </span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                              {item.procured_payment_method} · {item.procured_vendor || 'Lab'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => unprocureServiceMutation.mutate(item.id)}
+                              disabled={unprocureServiceMutation.isLoading}
+                              className="text-[10px] text-slate-400 hover:text-red-500 dark:hover:text-red-400 flex items-center gap-1 transition-colors underline"
+                              title="Reverse expense from Financial Ledger"
+                            >
+                              <Undo2 className="h-3 w-3" />
+                              <span>Cancel / Refund</span>
+                            </button>
+                          </div>
+                        ) : (
                           <button
                             type="button"
-                            onClick={() => unprocureServiceMutation.mutate(item.id)}
-                            disabled={unprocureServiceMutation.isLoading}
-                            className="text-[10px] text-slate-400 hover:text-red-500 dark:hover:text-red-400 flex items-center gap-1 transition-colors underline"
-                            title="Reverse expense from Financial Ledger"
+                            onClick={() => openProcureModal('SERVICE', item)}
+                            className="btn btn-secondary text-[11px] py-1 px-2.5 flex items-center gap-1 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/60"
+                            title="Mark this sublet job as paid to external lab and reflect in Financial Ledger"
                           >
-                            <Undo2 className="h-3 w-3" />
-                            <span>Cancel / Refund</span>
+                            <CreditCard className="h-3.5 w-3.5 text-indigo-500" />
+                            <span>Mark Procured</span>
                           </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => openProcureModal('SERVICE', item)}
-                          className="btn btn-secondary text-[11px] py-1 px-2.5 flex items-center gap-1 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/60"
-                          title="Mark this sublet job as paid to external lab and reflect in Financial Ledger"
-                        >
-                          <CreditCard className="h-3.5 w-3.5 text-indigo-500" />
-                          <span>Mark Procured</span>
-                        </button>
-                      )}
-                    </td>
+                        )}
+                      </td>
+                    )}
                     {!isLocked && (
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1">
@@ -1595,7 +1612,7 @@ const JobCardDetails: React.FC = () => {
         )}
 
         {/* External Subtotal Breakdown */}
-        {externalServices.length > 0 && (
+        {externalServices.length > 0 && canViewRetail && (
           <div className="p-3 bg-slate-50/70 dark:bg-slate-900/60 border-t border-gray-100 dark:border-slate-800 text-xs flex flex-wrap items-center justify-end gap-5">
             <span className="text-slate-500">
               Quotation External: <strong className="text-slate-800 dark:text-slate-200">{formatCurrency(initialExternalSubtotal)}</strong>
@@ -1631,7 +1648,7 @@ const JobCardDetails: React.FC = () => {
 
           <div className="flex items-center gap-3">
             <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-              Parts Total: <span className="text-primary-600 dark:text-primary-400">{formatCurrency(totalParts)}</span>
+              Parts Total: <span className="text-primary-600 dark:text-primary-400">{canViewRetail ? formatCurrency(totalParts) : '••••••'}</span>
             </span>
             {!isLocked && (
               <button
@@ -1659,7 +1676,9 @@ const JobCardDetails: React.FC = () => {
                   <th className="py-3 px-4 text-center">Quantity</th>
                   <th className="py-3 px-4 text-right">Unit Price</th>
                   <th className="py-3 px-4 text-right">Total</th>
-                  <th className="py-3 px-4 text-left">Parts Procurement / Cash Outflow</th>
+                  {canViewCost && (
+                    <th className="py-3 px-4 text-left">Parts Procurement / Cash Outflow</th>
+                  )}
                   {!isLocked && <th className="py-3 px-4 text-center">Action</th>}
                 </tr>
               </thead>
@@ -1700,44 +1719,46 @@ const JobCardDetails: React.FC = () => {
                       {formatQuantity(item.quantity)} {item.unit || 'pcs'}
                     </td>
                     <td className="py-3 px-4 text-right font-medium">
-                      {formatCurrency(item.unit_price)}
+                      {canViewRetail ? formatCurrency(item.unit_price) : '••••••'}
                     </td>
                     <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-slate-100">
-                      {formatCurrency(item.total_price)}
+                      {canViewRetail ? formatCurrency(item.total_price) : '••••••'}
                     </td>
-                    <td className="py-3 px-4">
-                      {item.is_procured ? (
-                        <div className="flex flex-col items-start gap-1">
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                            <span>Procured: {formatCurrency(item.procured_cost)}</span>
-                          </span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                            {item.procured_payment_method} · {item.procured_vendor || 'Distributor'}
-                          </span>
+                    {canViewCost && (
+                      <td className="py-3 px-4">
+                        {item.is_procured ? (
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                              <span>Procured: {formatCurrency(item.procured_cost)}</span>
+                            </span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                              {item.procured_payment_method} · {item.procured_vendor || 'Distributor'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => unprocureSparePartMutation.mutate(item.id)}
+                              disabled={unprocureSparePartMutation.isLoading}
+                              className="text-[10px] text-slate-400 hover:text-red-500 dark:hover:text-red-400 flex items-center gap-1 transition-colors underline"
+                              title="Reverse expense from Financial Ledger"
+                            >
+                              <Undo2 className="h-3 w-3" />
+                              <span>Cancel / Refund</span>
+                            </button>
+                          </div>
+                        ) : (
                           <button
                             type="button"
-                            onClick={() => unprocureSparePartMutation.mutate(item.id)}
-                            disabled={unprocureSparePartMutation.isLoading}
-                            className="text-[10px] text-slate-400 hover:text-red-500 dark:hover:text-red-400 flex items-center gap-1 transition-colors underline"
-                            title="Reverse expense from Financial Ledger"
+                            onClick={() => openProcureModal('PART', item)}
+                            className="btn btn-secondary text-[11px] py-1 px-2.5 flex items-center gap-1 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/60"
+                            title="Record actual procurement cost in Financial Management cash flow"
                           >
-                            <Undo2 className="h-3 w-3" />
-                            <span>Cancel / Refund</span>
+                            <CreditCard className="h-3.5 w-3.5 text-emerald-500" />
+                            <span>Mark Procured</span>
                           </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => openProcureModal('PART', item)}
-                          className="btn btn-secondary text-[11px] py-1 px-2.5 flex items-center gap-1 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/60"
-                          title="Record actual procurement cost in Financial Management cash flow"
-                        >
-                          <CreditCard className="h-3.5 w-3.5 text-emerald-500" />
-                          <span>Mark Procured</span>
-                        </button>
-                      )}
-                    </td>
+                        )}
+                      </td>
+                    )}
                     {!isLocked && (
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1">
@@ -1766,7 +1787,7 @@ const JobCardDetails: React.FC = () => {
         )}
 
         {/* Parts Subtotal Breakdown */}
-        {spareParts.length > 0 && (
+        {spareParts.length > 0 && canViewRetail && (
           <div className="p-3 bg-slate-50/70 dark:bg-slate-900/60 border-t border-gray-100 dark:border-slate-800 text-xs flex flex-wrap items-center justify-end gap-5">
             <span className="text-slate-500">
               Quotation Parts: <strong className="text-slate-800 dark:text-slate-200">{formatCurrency(initialPartsSubtotal)}</strong>
@@ -1795,21 +1816,21 @@ const JobCardDetails: React.FC = () => {
           <div className="space-y-2 text-xs">
             <div className="flex justify-between items-center py-1 border-b border-gray-100 dark:border-slate-800">
               <span className="text-slate-500">Initial Estimated Labor:</span>
-              <span className="font-medium text-slate-800 dark:text-slate-200">{formatCurrency(initialLaborSubtotal)}</span>
+              <span className="font-medium text-slate-800 dark:text-slate-200">{canViewRetail ? formatCurrency(initialLaborSubtotal) : '••••••'}</span>
             </div>
             {initialExternalSubtotal > 0 && (
               <div className="flex justify-between items-center py-1 border-b border-gray-100 dark:border-slate-800">
                 <span className="text-slate-500">Initial External Sublet Services:</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{formatCurrency(initialExternalSubtotal)}</span>
+                <span className="font-medium text-slate-800 dark:text-slate-200">{canViewRetail ? formatCurrency(initialExternalSubtotal) : '••••••'}</span>
               </div>
             )}
             <div className="flex justify-between items-center py-1 border-b border-gray-100 dark:border-slate-800">
               <span className="text-slate-500">Initial Estimated Parts:</span>
-              <span className="font-medium text-slate-800 dark:text-slate-200">{formatCurrency(initialPartsSubtotal)}</span>
+              <span className="font-medium text-slate-800 dark:text-slate-200">{canViewRetail ? formatCurrency(initialPartsSubtotal) : '••••••'}</span>
             </div>
             <div className="flex justify-between items-center py-1 font-semibold text-primary-600 dark:text-primary-400 bg-primary-50/50 dark:bg-primary-950/20 px-2 rounded">
               <span>Original Estimate Quotation:</span>
-              <span>{formatCurrency(totalEstimate)}</span>
+              <span>{canViewRetail ? formatCurrency(totalEstimate) : '••••••'}</span>
             </div>
 
             {totalExtra > 0 && (
@@ -1818,28 +1839,28 @@ const JobCardDetails: React.FC = () => {
                   <Sparkles className="h-3.5 w-3.5" />
                   Extra Work Added Mid-Repair:
                 </span>
-                <span>+{formatCurrency(totalExtra)}</span>
+                <span>+{canViewRetail ? formatCurrency(totalExtra) : '••••••'}</span>
               </div>
             )}
 
             <div className="pt-2 border-t border-gray-100 dark:border-slate-800 space-y-1">
               <div className="flex justify-between items-center text-[11px] text-slate-500">
                 <span>Workshop Labor Total:</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(totalLabor)}</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">{canViewRetail ? formatCurrency(totalLabor) : '••••••'}</span>
               </div>
               <div className="flex justify-between items-center text-[11px] text-slate-500">
                 <span>External Sublet Services Total:</span>
-                <span className="font-semibold text-indigo-600 dark:text-indigo-400">{formatCurrency(totalExternal)}</span>
+                <span className="font-semibold text-indigo-600 dark:text-indigo-400">{canViewRetail ? formatCurrency(totalExternal) : '••••••'}</span>
               </div>
               <div className="flex justify-between items-center text-[11px] text-slate-500">
                 <span>Spare Parts & Materials Total:</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(totalParts)}</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">{canViewRetail ? formatCurrency(totalParts) : '••••••'}</span>
               </div>
             </div>
 
             <div className="flex justify-between items-center pt-2 text-sm font-bold text-gray-900 dark:text-white border-t border-gray-200 dark:border-slate-800">
               <span>Grand Total Amount:</span>
-              <span className="text-base text-primary-600 dark:text-primary-400">{formatCurrency(grandTotal)}</span>
+              <span className="text-base text-primary-600 dark:text-primary-400">{canViewRetail ? formatCurrency(grandTotal) : '••••••'}</span>
             </div>
           </div>
         </div>
@@ -3333,7 +3354,7 @@ const JobCardDetails: React.FC = () => {
       {/* ========================================================================= */}
       {/* MODAL 4: MARK ITEM AS PROCURED / RECORD OPEX CASH OUTFLOW                */}
       {/* ========================================================================= */}
-      {procurementModal.isOpen && (
+      {procurementModal.isOpen && canViewCost && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
           <div className="bg-white dark:bg-[#0e1424] border border-gray-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
             <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">

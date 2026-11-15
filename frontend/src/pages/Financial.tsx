@@ -325,21 +325,21 @@ const Financial: React.FC = () => {
   const { data: salariesData } = useQuery(
     ['financial-salaries', salaryYear],
     () => financialService.getSalaries(salaryYear),
-    { enabled: canAccessFinancial }
+    { enabled: canAccessFinancial && canViewCost }
   );
 
   // 6. Investments & Capital Query
   const { data: investmentsData } = useQuery(
     ['financial-investments'],
     () => financialService.getInvestments(),
-    { enabled: canAccessFinancial }
+    { enabled: canAccessFinancial && canViewCost }
   );
 
   // 6. Users List Query (to populate staff selector)
   const { data: usersData } = useQuery(
     ['all-staff-users'],
     () => usersService.getUsers({ limit: 100 }),
-    { enabled: canAccessFinancial }
+    { enabled: canManageFinances }
   );
 
   // Staff members (Managers and Technicians)
@@ -794,33 +794,37 @@ const Financial: React.FC = () => {
             </span>
           ) : null}
         </button>
-        <button
-          onClick={() => setActiveTab('salaries')}
-          className={`py-3 px-3.5 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
-            activeTab === 'salaries'
-              ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
-              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'
-          }`}
-        >
-          <Users className="h-4 w-4" />
-          <span>Staff Payroll & Salaries</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('capex')}
-          className={`py-3 px-3.5 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
-            activeTab === 'capex'
-              ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
-              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'
-          }`}
-        >
-          <Landmark className="h-4 w-4 text-purple-500" />
-          <span>Garage Capital, Setup & Assets (CapEx)</span>
-          {investmentsData?.investments?.length ? (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 font-mono">
-              {investmentsData.investments.length} inv
-            </span>
-          ) : null}
-        </button>
+        {canViewCost && (
+          <button
+            onClick={() => setActiveTab('salaries')}
+            className={`py-3 px-3.5 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
+              activeTab === 'salaries'
+                ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+          >
+            <Users className="h-4 w-4" />
+            <span>Staff Payroll & Salaries</span>
+          </button>
+        )}
+        {canViewCost && (
+          <button
+            onClick={() => setActiveTab('capex')}
+            className={`py-3 px-3.5 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
+              activeTab === 'capex'
+                ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+          >
+            <Landmark className="h-4 w-4 text-purple-500" />
+            <span>Garage Capital, Setup & Assets (CapEx)</span>
+            {investmentsData?.investments?.length ? (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 font-mono">
+                {investmentsData.investments.length} inv
+              </span>
+            ) : null}
+          </button>
+        )}
       </div>
 
       {/* ========================================================================= */}
@@ -2265,7 +2269,7 @@ const Financial: React.FC = () => {
       {/* ========================================================================= */}
       {/* TAB 3: STAFF PAYROLL & SALARIES */}
       {/* ========================================================================= */}
-      {activeTab === 'salaries' && (
+      {activeTab === 'salaries' && canViewCost && (
         <div className="space-y-6">
           {/* Header Card with Year Filter */}
           <div className="card p-5 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">
@@ -2530,7 +2534,7 @@ const Financial: React.FC = () => {
       {/* ========================================================================= */}
       {/* TAB 4: GARAGE CAPITAL, SETUP & ASSETS (CAPEX) */}
       {/* ========================================================================= */}
-      {activeTab === 'capex' && (
+      {activeTab === 'capex' && canViewCost && (
         <div className="space-y-6">
           {/* Header Capital Position & Valuation Card */}
           <div className="card p-6 bg-white dark:bg-[#0c101c] border border-gray-200 dark:border-slate-800/90 rounded-xl shadow-xs">

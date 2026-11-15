@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { useAuth } from '../contexts/AuthContext';
 import { sparePartsService } from '../services/spareParts';
 import { ArrowLeft, Save, Plus, Car, Wrench, Tag, Info } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -16,6 +17,11 @@ const EditSparePart: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const userScopes: string[] = user?.scopes || [];
+  const isManager = user?.role === 'MANAGER';
+  const canViewCost = isManager || userScopes.includes('view_garage_cost') || userScopes.includes('financial');
+
   const [isAddingNewCategory, setIsAddingNewCategory] = useState(false);
   const [newCategoryInput, setNewCategoryInput] = useState('');
 
@@ -178,7 +184,7 @@ const EditSparePart: React.FC = () => {
     }
 
     const { isUniversal, ...restFormData } = formData;
-    const payload = {
+    const payload: any = {
       ...restFormData,
       category: finalCategory,
       make: isUniversal ? 'Universal' : formData.make,
@@ -187,10 +193,13 @@ const EditSparePart: React.FC = () => {
       yearStart: formData.yearStart ? parseInt(formData.yearStart, 10) : undefined,
       yearEnd: formData.yearEnd ? parseInt(formData.yearEnd, 10) : undefined,
       price: parseFloat(formData.price) || 0,
-      cost: parseFloat(formData.cost) || 0,
       stock: parseFloat(formData.stock) || 0,
       minStock: parseFloat(formData.minStock) || 0
     };
+
+    if (canViewCost && formData.cost !== '') {
+      payload.cost = parseFloat(formData.cost) || 0;
+    }
 
     updateSparePartMutation.mutate(payload);
   };
@@ -786,23 +795,24 @@ const EditSparePart: React.FC = () => {
               <span className="text-[10px] text-slate-500 mt-1 block">Billed to customer</span>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
-                Garage Cost (₹) *
-              </label>
-              <input
-                type="number"
-                name="cost"
-                value={formData.cost}
-                onChange={handleInputChange}
-                className="input w-full text-xs font-semibold"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-                required
-              />
-              <span className="text-[10px] text-slate-500 mt-1 block">Procurement cost</span>
-            </div>
+            {canViewCost && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  Garage Cost (₹)
+                </label>
+                <input
+                  type="number"
+                  name="cost"
+                  value={formData.cost}
+                  onChange={handleInputChange}
+                  className="input w-full text-xs font-semibold"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                />
+                <span className="text-[10px] text-slate-500 mt-1 block">Procurement cost</span>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">

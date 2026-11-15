@@ -2,7 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import Joi from 'joi';
 import { query } from '../database/connection';
-import { AuthRequest, requireRole, requireRoleOrScope } from '../middleware/auth';
+import { AuthRequest, requireRole, requireRoleOrScope, canViewCost } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -34,7 +34,7 @@ const updateUserSchema = Joi.object({
 });
 
 // Helper to format user row
-const formatUserRow = (row: any) => {
+const formatUserRow = (row: any, allowSalary: boolean = true) => {
   if (!row) return null;
   let scopes: string[] = [];
   if (Array.isArray(row.scopes)) {
@@ -60,8 +60,8 @@ const formatUserRow = (row: any) => {
     email: row.email,
     role: row.role,
     scopes,
-    baseSalary: parseFloat(row.baseSalary || row.base_salary || '0'),
-    base_salary: parseFloat(row.baseSalary || row.base_salary || '0'),
+    baseSalary: allowSalary ? parseFloat(row.baseSalary || row.base_salary || '0') : null,
+    base_salary: allowSalary ? parseFloat(row.baseSalary || row.base_salary || '0') : null,
     isActive: row.isActive !== undefined ? Boolean(row.isActive) : Boolean(row.is_active),
     is_active: row.isActive !== undefined ? Boolean(row.isActive) : Boolean(row.is_active),
     createdAt: row.createdAt || row.created_at,
@@ -126,8 +126,9 @@ router.get('/', requireRoleOrScope(['MANAGER'], 'users'), async (req: AuthReques
     `;
     const result = await query(dataQuery, dataParams);
 
+    const allowSalary = canViewCost(req.user);
     res.json({
-      users: result.rows.map(formatUserRow),
+      users: result.rows.map(row => formatUserRow(row, allowSalary)),
       pagination: {
         page,
         limit,
@@ -163,7 +164,8 @@ router.get('/technicians', async (req: AuthRequest, res) => {
       ORDER BY name ASC`
     );
     
-    res.json({ technicians: result.rows.map(formatUserRow) });
+    // Technicians list is used for job card assignments; do not leak salaries
+    res.json({ technicians: result.rows.map(row => formatUserRow(row, false)) });
   } catch (error) {
     console.error('Get technicians error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -197,7 +199,8 @@ router.get('/:id', requireRoleOrScope(['MANAGER'], 'users'), async (req: AuthReq
       return res.status(404).json({ message: 'User not found' });
     }
     
-    res.json({ user: formatUserRow(result.rows[0]) });
+    const allowSalary = canViewCost(req.user);
+    res.json({ user: formatUserRow(result.rows[0], allowSalary) });
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ message: 'Internal server error' });
