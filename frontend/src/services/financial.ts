@@ -70,6 +70,7 @@ export interface ExpenseQueryParams {
   category?: ExpenseCategory | 'ALL';
   expenseType?: ExpenseType | 'ALL';
   origin?: ExpenseOrigin;
+  isGarageWorkExpense?: boolean;
   startDate?: string;
   endDate?: string;
 }
@@ -117,6 +118,11 @@ export const financialService = {
   deleteExpense: async (id: string): Promise<{ message: string; deletedId: string }> => {
     const response = await api.delete(`/financial/expenses/${id}`);
     return response.data;
+  },
+
+  toggleWorkExpense: async (id: string): Promise<GarageExpense> => {
+    const response = await api.patch(`/financial/expenses/${id}/toggle-work-expense`);
+    return response.data.expense;
   },
 
   getSalaries: async (year?: number | string): Promise<SalariesResponse> => {

@@ -549,6 +549,7 @@ router.get('/expenses', requireRoleOrScope(['MANAGER'], ['financial', 'view_cust
       category = 'ALL',
       expenseType = 'ALL',
       origin = 'ALL',
+      isGarageWorkExpense,
       startDate,
       endDate
     } = req.query;
@@ -582,6 +583,12 @@ router.get('/expenses', requireRoleOrScope(['MANAGER'], ['financial', 'view_cust
       whereClause += ` AND (ge.category NOT IN ('PARTS_PROCUREMENT', 'SUBLET_SERVICES') AND jcsp.id IS NULL AND jcs.id IS NULL)`;
     } else if (origin === 'JOB_CARDS') {
       whereClause += ` AND (ge.category IN ('PARTS_PROCUREMENT', 'SUBLET_SERVICES') OR jcsp.id IS NOT NULL OR jcs.id IS NOT NULL)`;
+    }
+
+    if (isGarageWorkExpense !== undefined) {
+      whereClause += ` AND ge.is_garage_work_expense = $${paramIndex}`;
+      queryParams.push(isGarageWorkExpense === 'true' || isGarageWorkExpense === true);
+      paramIndex++;
     }
 
     if (startDate) {
@@ -648,6 +655,7 @@ router.get('/expenses', requireRoleOrScope(['MANAGER'], ['financial', 'view_cust
     const sanitizedExpenses = result.rows.map(exp => ({
       ...exp,
       is_job_procurement: exp.category === 'PARTS_PROCUREMENT' || exp.category === 'SUBLET_SERVICES' || exp.linked_job_card_number != null,
+      is_garage_work_expense: Boolean(exp.is_garage_work_expense),
       amount: allowCost ? exp.amount : null,
       customer_retail_price: allowRetail ? exp.customer_retail_price : null
     }));
@@ -698,7 +706,8 @@ router.post('/expenses', requireRoleOrScope(['MANAGER'], 'financial'), async (re
       invoiceReference = '',
       notes = '',
       isRecurring = false,
-      recurringFrequency
+      recurringFrequency,
+      isGarageWorkExpense = false
     } = req.body;
 
     if (!title || !category || !amount || parseFloat(amount) <= 0) {
@@ -711,8 +720,9 @@ router.post('/expenses', requireRoleOrScope(['MANAGER'], 'financial'), async (re
       INSERT INTO garage_expenses (
         expense_number, title, category, expense_type, amount,
         expense_date, payment_method, payee_recipient, user_id,
-        invoice_reference, notes, is_recurring, recurring_frequency, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        invoice_reference, notes, is_recurring, recurring_frequency, created_by,
+        is_garage_work_expense
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING *
     `, [
       expenseNumber,
@@ -728,7 +738,8 @@ router.post('/expenses', requireRoleOrScope(['MANAGER'], 'financial'), async (re
       notes.trim(),
       Boolean(isRecurring),
       recurringFrequency || null,
-      req.user?.id || null
+      req.user?.id || null,
+      Boolean(isGarageWorkExpense)
     ]);
 
     res.status(201).json({
@@ -759,7 +770,8 @@ router.put('/expenses/:id', requireRoleOrScope(['MANAGER'], 'financial'), async 
       invoiceReference,
       notes,
       isRecurring,
-      recurringFrequency
+      recurringFrequency,
+      isGarageWorkExpense
     } = req.body;
 
     const check = await query('SELECT * FROM garage_expenses WHERE id = $1', [id]);
@@ -781,8 +793,9 @@ router.put('/expenses/:id', requireRoleOrScope(['MANAGER'], 'financial'), async 
           notes = COALESCE($10, notes),
           is_recurring = COALESCE($11, is_recurring),
           recurring_frequency = $12,
+          is_garage_work_expense = COALESCE($13, is_garage_work_expense),
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = $13
+      WHERE id = $14
       RETURNING *
     `, [
       title ? title.trim() : null,
@@ -797,6 +810,7 @@ router.put('/expenses/:id', requireRoleOrScope(['MANAGER'], 'financial'), async 
       notes !== undefined ? notes : check.rows[0].notes,
       isRecurring !== undefined ? Boolean(isRecurring) : check.rows[0].is_recurring,
       recurringFrequency !== undefined ? recurringFrequency : check.rows[0].recurring_frequency,
+      isGarageWorkExpense !== undefined ? Boolean(isGarageWorkExpense) : null,
       id
     ]);
 
@@ -809,6 +823,35 @@ router.put('/expenses/:id', requireRoleOrScope(['MANAGER'], 'financial'), async 
     res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });
+// ============================================================================
+// 6b. TOGGLE WORK EXPENSE ASSIGNMENT (CAPEX / GARAGE WORK)
+// ============================================================================
+router.patch('/expenses/:id/toggle-work-expense', requireRoleOrScope(['MANAGER'], 'financial'), async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const result = await query(
+      `UPDATE garage_expenses
+       SET is_garage_work_expense = NOT COALESCE(is_garage_work_expense, false),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Expense record not found' });
+    }
+
+    res.json({
+      message: 'Garage work expense assignment toggled successfully',
+      expense: result.rows[0]
+    });
+  } catch (error: any) {
+    console.error('Toggle work expense error:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
 
 // ============================================================================
 // 7. DELETE EXPENSE RECORD

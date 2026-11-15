@@ -293,6 +293,7 @@ const Financial: React.FC = () => {
   const [formNotes, setFormNotes] = useState('');
   const [formIsRecurring, setFormIsRecurring] = useState(false);
   const [formRecurringFreq, setFormRecurringFreq] = useState('MONTHLY');
+  const [formIsGarageWorkExpense, setFormIsGarageWorkExpense] = useState(false);
 
   // Set Salary Modal State
   const [isSalaryConfigModalOpen, setIsSalaryConfigModalOpen] = useState(false);
@@ -356,25 +357,20 @@ const Financial: React.FC = () => {
     { enabled: canAccessFinancial && canViewCost }
   );
 
-  // 4c. Dedicated Garage Operational & Miscellaneous Work Expenses Query (Travel, Food, Commission, Misc)
+  // 4c. Dedicated Garage Operational & Miscellaneous Work Expenses Query (ONLY items explicitly assigned with is_garage_work_expense = true)
   const { data: garageMiscExpensesData, isLoading: isGarageMiscLoading } = useQuery(
     ['garage-expenses', 'garage-misc-register'],
     () =>
       financialService.getExpenses({
         page: 1,
         limit: 200,
-        origin: 'GARAGE',
-        expenseType: 'OPEX',
+        isGarageWorkExpense: true,
       }),
     { enabled: canAccessFinancial && canViewCost }
   );
 
   const garageMiscExpenses = useMemo(() => {
-    return (garageMiscExpensesData?.expenses || []).filter(
-      (e) =>
-        ['TRAVEL_CONVEYANCE', 'FOOD_REFRESHMENTS', 'COMMISSION', 'MISCELLANEOUS', 'CONSUMABLES', 'MAINTENANCE'].includes(e.category) ||
-        (!['GARAGE_SETUP', 'TOOLS_EQUIPMENT', 'RENT', 'SALARY', 'PARTS_PROCUREMENT', 'SUBLET_SERVICES'].includes(e.category) && !e.is_job_procurement)
-    );
+    return garageMiscExpensesData?.expenses || [];
   }, [garageMiscExpensesData]);
 
   const filteredMiscExpenses = useMemo(() => {
@@ -469,6 +465,20 @@ const Financial: React.FC = () => {
       },
       onError: (err: any) => {
         toast.error(err.response?.data?.message || 'Failed to delete expense');
+      },
+    }
+  );
+
+  const toggleWorkExpenseMutation = useMutation(
+    (id: string) => financialService.toggleWorkExpense(id),
+    {
+      onSuccess: () => {
+        toast.success('Garage work expense assignment updated');
+        queryClient.invalidateQueries('garage-expenses');
+        queryClient.invalidateQueries('financial-reports');
+      },
+      onError: (err: any) => {
+        toast.error(err.response?.data?.message || 'Failed to update expense assignment');
       },
     }
   );
@@ -608,6 +618,7 @@ const Financial: React.FC = () => {
     setFormNotes('');
     setFormIsRecurring(false);
     setFormRecurringFreq('MONTHLY');
+    setFormIsGarageWorkExpense(false);
     setEditingExpense(null);
   };
 
@@ -617,7 +628,8 @@ const Financial: React.FC = () => {
     defaultUserId?: string,
     defaultPayee?: string,
     defaultTitle?: string,
-    defaultAmount?: string | number
+    defaultAmount?: string | number,
+    defaultIsGarageWorkExpense?: boolean
   ) => {
     resetForm();
     if (defaultCategory) {
@@ -629,6 +641,15 @@ const Financial: React.FC = () => {
     if (defaultTitle) setFormTitle(defaultTitle);
     if (defaultAmount && Number(defaultAmount) > 0) {
       setFormAmount(String(defaultAmount));
+    }
+    if (defaultIsGarageWorkExpense !== undefined) {
+      setFormIsGarageWorkExpense(defaultIsGarageWorkExpense);
+    } else if (
+      defaultCategory === 'TRAVEL_CONVEYANCE' ||
+      defaultCategory === 'FOOD_REFRESHMENTS' ||
+      defaultCategory === 'COMMISSION'
+    ) {
+      setFormIsGarageWorkExpense(true);
     }
     setIsExpenseModalOpen(true);
   };
@@ -675,6 +696,7 @@ const Financial: React.FC = () => {
     setFormNotes(expense.notes || '');
     setFormIsRecurring(Boolean(expense.is_recurring));
     setFormRecurringFreq(expense.recurring_frequency || 'MONTHLY');
+    setFormIsGarageWorkExpense(Boolean(expense.is_garage_work_expense));
     setIsExpenseModalOpen(true);
   };
 
@@ -704,6 +726,7 @@ const Financial: React.FC = () => {
       notes: formNotes.trim() || undefined,
       isRecurring: formIsRecurring,
       recurringFrequency: formIsRecurring ? formRecurringFreq : undefined,
+      isGarageWorkExpense: formIsGarageWorkExpense,
     };
 
     if (editingExpense) {
@@ -2759,11 +2782,31 @@ const Financial: React.FC = () => {
                                     {exp.notes}
                                   </div>
                                 )}
-                                {exp.invoice_reference && (
-                                  <div className="text-[10px] font-mono text-purple-600 dark:text-purple-400 mt-0.5">
-                                    Ref: {exp.invoice_reference}
-                                  </div>
-                                )}
+                                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                  {exp.invoice_reference && (
+                                    <span className="text-[10px] font-mono text-purple-600 dark:text-purple-400">
+                                      Ref: {exp.invoice_reference}
+                                    </span>
+                                  )}
+                                  {canManageFinances && (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleWorkExpenseMutation.mutate(exp.id)}
+                                      className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.2 rounded transition-all ${
+                                        exp.is_garage_work_expense
+                                          ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
+                                          : 'text-gray-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-300 border border-dashed border-gray-300 dark:border-slate-700 hover:border-amber-400'
+                                      }`}
+                                      title={
+                                        exp.is_garage_work_expense
+                                          ? 'Assigned to Garage Capital & Work Expenses. Click to remove.'
+                                          : 'Click to assign this expense to Garage Capital & Work Expenses.'
+                                      }
+                                    >
+                                      {exp.is_garage_work_expense ? '★ In Garage Work' : '+ Assign to Garage Work'}
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap">
                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium ${catConfig.badgeClass}`}>
@@ -4076,28 +4119,28 @@ const Financial: React.FC = () => {
               {canManageFinances && (
                 <div className="flex flex-wrap items-center gap-2">
                   <button
-                    onClick={() => handleOpenAddModal('TRAVEL_CONVEYANCE', 'OPEX')}
+                    onClick={() => handleOpenAddModal('TRAVEL_CONVEYANCE', 'OPEX', undefined, undefined, undefined, undefined, true)}
                     className="btn btn-secondary text-xs py-1.5 px-2.5 flex items-center gap-1.5"
                   >
                     <Car className="h-3.5 w-3.5 text-teal-500" />
                     <span>+ Travel / Fuel</span>
                   </button>
                   <button
-                    onClick={() => handleOpenAddModal('FOOD_REFRESHMENTS', 'OPEX')}
+                    onClick={() => handleOpenAddModal('FOOD_REFRESHMENTS', 'OPEX', undefined, undefined, undefined, undefined, true)}
                     className="btn btn-secondary text-xs py-1.5 px-2.5 flex items-center gap-1.5"
                   >
                     <Coffee className="h-3.5 w-3.5 text-amber-500" />
                     <span>+ Food / Meals</span>
                   </button>
                   <button
-                    onClick={() => handleOpenAddModal('COMMISSION', 'OPEX')}
+                    onClick={() => handleOpenAddModal('COMMISSION', 'OPEX', undefined, undefined, undefined, undefined, true)}
                     className="btn btn-secondary text-xs py-1.5 px-2.5 flex items-center gap-1.5"
                   >
                     <BadgePercent className="h-3.5 w-3.5 text-violet-500" />
                     <span>+ Commission</span>
                   </button>
                   <button
-                    onClick={() => handleOpenAddModal('MISCELLANEOUS', 'OPEX')}
+                    onClick={() => handleOpenAddModal('MISCELLANEOUS', 'OPEX', undefined, undefined, undefined, undefined, true)}
                     className="btn btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-sm"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -4373,6 +4416,13 @@ const Financial: React.FC = () => {
                               <td className="px-4 py-3 text-right whitespace-nowrap">
                                 <div className="flex items-center justify-end gap-1.5">
                                   <button
+                                    onClick={() => toggleWorkExpenseMutation.mutate(exp.id)}
+                                    className="p-1.5 rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40 text-[11px] font-semibold"
+                                    title="Unassign / Remove from Garage Work Expenses"
+                                  >
+                                    Remove
+                                  </button>
+                                  <button
                                     onClick={() => handleOpenEditModal(exp)}
                                     className="p-1.5 rounded-lg text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-primary-400 dark:hover:bg-slate-800"
                                     title="Edit Expense"
@@ -4635,6 +4685,28 @@ const Financial: React.FC = () => {
                   </label>
                 </div>
               </div>
+
+            {/* Garage Work Expense Assignment Checkbox */}
+            <div className="p-3.5 rounded-xl border border-amber-300 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/30 flex items-start gap-3">
+              <input
+                type="checkbox"
+                id="formIsGarageWorkExpense"
+                className="mt-0.5 rounded border-amber-400 text-amber-600 focus:ring-amber-500 h-4 w-4 cursor-pointer"
+                checked={formIsGarageWorkExpense}
+                onChange={(e) => setFormIsGarageWorkExpense(e.target.checked)}
+              />
+              <label htmlFor="formIsGarageWorkExpense" className="cursor-pointer select-none">
+                <span className="font-bold text-gray-900 dark:text-slate-100 flex items-center gap-1.5 text-xs">
+                  <span>Assign to Garage Operational Work Expenses</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-200/80 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 font-mono">
+                    CapEx & Setup Tab
+                  </span>
+                </span>
+                <p className="text-[11px] text-gray-600 dark:text-slate-400 mt-0.5 leading-relaxed">
+                  Only expenses with this option selected will appear and be calculated inside the Garage Capital, Setup & Assets (CapEx) tab. If left unticked, it will stay in the general Outflow Ledger and will NOT count toward garage setup figures.
+                </p>
+              </label>
+            </div>
 
               {/* Notes */}
               <div>

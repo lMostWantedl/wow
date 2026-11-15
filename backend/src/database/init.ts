@@ -53,6 +53,7 @@ const initializeDatabase = async () => {
       ALTER TABLE vehicle_variants ADD COLUMN IF NOT EXISTS ecm VARCHAR(100);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS scopes JSONB DEFAULT '[]'::jsonb;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS base_salary NUMERIC(12, 2) DEFAULT 0;
+      ALTER TABLE garage_expenses ADD COLUMN IF NOT EXISTS is_garage_work_expense BOOLEAN DEFAULT false;
 
       CREATE TABLE IF NOT EXISTS garage_investments (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

@@ -327,6 +327,7 @@ export interface GarageExpense {
   customer_retail_price?: number;
   linked_job_card_number?: string;
   is_job_procurement?: boolean;
+  is_garage_work_expense?: boolean;
   is_recurring: boolean;
   recurring_frequency?: string;
   created_by?: string;
@@ -347,6 +348,7 @@ export interface CreateExpenseData {
   notes?: string;
   isRecurring?: boolean;
   recurringFrequency?: string;
+  isGarageWorkExpense?: boolean;
 }
 
 export interface ExpenseTotals {

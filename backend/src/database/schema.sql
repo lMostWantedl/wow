@@ -366,6 +366,7 @@ CREATE TABLE IF NOT EXISTS garage_expenses (
     invoice_reference VARCHAR(100),
     notes TEXT,
     is_recurring BOOLEAN DEFAULT FALSE,
+    is_garage_work_expense BOOLEAN DEFAULT FALSE,
     recurring_frequency VARCHAR(50),
     created_by UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
